@@ -1100,9 +1100,7 @@
       ];
 
       // Away Mode rules. Each rule has a destination, a toggle destination (where toggle
-      // calls go to switch Away Mode on/off), togglePin (4-digit dial code), and a list of scheduler IDs it applies to.
-      const randomTogglePin = () => String(Math.floor(Math.random() * 10000)).padStart(4, "0");
-
+      // calls go to switch Away Mode on/off), and a list of scheduler IDs it applies to.
       const seedAwayRules = [
         {
           id: "am-reception",
@@ -1110,7 +1108,6 @@
           destination: "Main Reception [6678]",
           destValue: "main-6678",
           toggleDestination: "Toggle1 [1234]",
-          togglePin: "7391",
           expiresHours: 24,
           expiresMinutes: 0,
           schedulerIds: [],
@@ -1121,7 +1118,6 @@
           destination: "Holiday Greeting [2243]",
           destValue: "holiday-2243",
           toggleDestination: "Toggle2 [5678]",
-          togglePin: "2048",
           expiresHours: 2,
           expiresMinutes: 30,
           schedulerIds: ["mo", "bh"],
@@ -1132,7 +1128,6 @@
           destination: "Front Desk [3390]",
           destValue: "front-3390",
           toggleDestination: "Toggle3 [9000]",
-          togglePin: "5512",
           expiresHours: 24,
           expiresMinutes: 0,
           schedulerIds: [],
@@ -1906,7 +1901,7 @@
           const before = text.slice(0, idx);
           const match  = text.slice(idx, idx + q.length);
           const after  = text.slice(idx + q.length);
-          return (<>{before}<mark className="bg-[#E8EDF5] text-ink-900 rounded-sm px-0.5">{match}</mark>{after}</>);
+          return (<>{before}<mark className="bg-warning-50 text-ink-900 rounded-sm px-0.5">{match}</mark>{after}</>);
         }
         // 2) Stripped-phone fallback: ignore brackets/spaces/hyphens both in
         //    the query and the text, then map the stripped match back onto the
@@ -1930,7 +1925,7 @@
         const before = text.slice(0, origStart);
         const match  = text.slice(origStart, origEnd);
         const after  = text.slice(origEnd);
-        return (<>{before}<mark className="bg-[#E8EDF5] text-ink-900 rounded-sm px-0.5">{match}</mark>{after}</>);
+        return (<>{before}<mark className="bg-warning-50 text-ink-900 rounded-sm px-0.5">{match}</mark>{after}</>);
       };
 
       const ordinalSuffix = (n) => {
@@ -2763,7 +2758,6 @@
           if (q) {
             rows = rows.filter((r) => (
               r.name.toLowerCase().includes(q) ||
-              (r.togglePin || "").toLowerCase().includes(q) ||
               (r.assignedSchedulerNames || []).some((n) => n.toLowerCase().includes(q))
             ));
           }
@@ -2849,14 +2843,13 @@
             ) : (
               <div className="mt-6">
                 <div className="border border-ink-100 rounded-lg overflow-hidden">
-                  <div className="grid grid-cols-[repeat(5,minmax(0,1fr))_90px] h-10 bg-ink-50 border-b border-ink-100 items-center">
+                  <div className="grid grid-cols-[repeat(4,minmax(0,1fr))_90px] h-10 bg-ink-50 border-b border-ink-100 items-center">
                     <div className="pl-4 pr-3">
                       <SortHeader field="name" label="AWAY MODE RULE" />
                     </div>
-                    <div className="px-3 text-[12px] font-bold uppercase tracking-[0.06em] text-ink-900">ROUTING DESTINATION</div>
+                    <div className="px-3 text-[12px] font-bold uppercase tracking-[0.06em] text-ink-900">DESTINATION</div>
                     <div className="px-3 text-[12px] font-bold uppercase tracking-[0.06em] text-ink-900">ASSIGNED SCHEDULERS</div>
                     <div className="px-3 text-[12px] font-bold uppercase tracking-[0.06em] text-ink-900">TOGGLE DESTINATION</div>
-                    <div className="px-3 text-[12px] font-bold uppercase tracking-[0.06em] text-ink-900">TOGGLE PIN</div>
                     <div className="flex justify-center text-[12px] font-bold uppercase tracking-[0.06em] text-ink-900">ACTIONS</div>
                   </div>
                   {pageRows.length === 0 ? (
@@ -2864,7 +2857,7 @@
                   ) : (
                     pageRows.map((r, i) => (
                       <div key={r.id}
-                        className={`grid grid-cols-[repeat(5,minmax(0,1fr))_90px] h-[52px] items-center ${i < pageRows.length - 1 ? "border-b border-ink-100" : ""} ${highlightedRowIds[r.id] ? "bg-[#FEF6DB]" : "hover:bg-ink-50/50"} transition-colors`}>
+                        className={`grid grid-cols-[repeat(4,minmax(0,1fr))_90px] h-[52px] items-center ${i < pageRows.length - 1 ? "border-b border-ink-100" : ""} ${highlightedRowIds[r.id] ? "bg-[#FEF6DB]" : "hover:bg-ink-50/50"} transition-colors`}>
                         <div className="pl-4 pr-3 text-[14px] text-ink-900 min-w-0">
                           <TruncationTooltip text={r.name} display={highlightMatch(r.name, search)} className="w-full" />
                         </div>
@@ -2900,9 +2893,6 @@
                           {r.toggleDestination
                             ? <TruncationTooltip text={r.toggleDestination} className="w-full" />
                             : <span className="text-ink-400">N/A</span>}
-                        </div>
-                        <div className="px-3 text-[14px] text-ink-700 tabular-nums">
-                          {r.togglePin || "—"}
                         </div>
                         <div className="flex justify-center">
                           <AwayModeRowMenu rule={r} onEdit={onEdit} onDelete={onDelete} />
@@ -3461,13 +3451,10 @@
        * ===================================================== */
 
       // Small numeric stepper used for hours / minutes.
-      const NumberStepper = ({ value, onChange, min = 0, max = 99, step = 1, width = 112, fill = false }) => {
+      const NumberStepper = ({ value, onChange, min = 0, max = 99, step = 1, width = 112 }) => {
         const clamp = (n) => Math.max(min, Math.min(max, n));
         return (
-          <div
-            className={`relative h-8 flex items-center border border-ink-200 rounded bg-white ${fill ? "min-w-0 flex-1 w-full" : ""}`}
-            style={fill ? undefined : { width }}
-          >
+          <div className="relative h-8 flex items-center border border-ink-200 rounded bg-white" style={{ width }}>
             <input
               type="text"
               value={String(value)}
@@ -3497,27 +3484,11 @@
         );
       };
 
-      const parseToggleDestinationStr = (s) => {
-        const str = String(s || "").trim();
-        const m = str.match(/^(.*?)\s*\[([^\]]*)\]\s*$/);
-        if (m) return { namePart: m[1].trim(), bracketPart: m[2].trim() };
-        return { namePart: str, bracketPart: "" };
-      };
-      const formatToggleDestinationStr = (namePart, bracketPart) => {
-        const n = String(namePart || "").trim();
-        const b = String(bracketPart || "").trim();
-        if (b) return `${n} [${b}]`;
-        return n;
-      };
-
       const AwayModeRuleModal = ({ open, onClose, editing, schedulers, awayRules = [], onSave }) => {
         const [name, setName] = useState("");
         const [destination, setDestination] = useState("");
         const [expiresHours, setExpiresHours] = useState(24);
         const [expiresMinutes, setExpiresMinutes] = useState(0);
-        const [toggleDestinationName, setToggleDestinationName] = useState("");
-        const [toggleDestBracket, setToggleDestBracket] = useState("");
-        const [pinInput, setPinInput] = useState("");
         // assignedSchedulers is an array of scheduler IDs (or empty strings for new rows)
         const [assignedSchedulers, setAssignedSchedulers] = useState([""]);
         const [confirmOpen, setConfirmOpen] = useState(false);
@@ -3528,38 +3499,20 @@
         useEffect(() => {
           if (!open) return;
           const init = editing
-            ? (() => {
-                const p = parseToggleDestinationStr(editing.toggleDestination);
-                return {
-                  name: editing.name || "",
-                  destination: editing.destValue || "",
-                  expiresHours: editing.expiresHours ?? 24,
-                  expiresMinutes: editing.expiresMinutes ?? 0,
-                  schedulerIds: editing.schedulerIds && editing.schedulerIds.length ? [...editing.schedulerIds] : [""],
-                  toggleDestinationName: p.namePart,
-                  toggleDestBracket: p.bracketPart,
-                  pinInput: String(editing.togglePin ?? "").replace(/\D/g, "").slice(0, 4),
-                };
-              })()
-            : {
-                name: "",
-                destination: "",
-                expiresHours: 24,
-                expiresMinutes: 0,
-                schedulerIds: [""],
-                toggleDestinationName: "",
-                toggleDestBracket: "",
-                pinInput: "",
-              };
+            ? {
+                name: editing.name || "",
+                destination: editing.destValue || "",
+                expiresHours: editing.expiresHours ?? 24,
+                expiresMinutes: editing.expiresMinutes ?? 0,
+                schedulerIds: editing.schedulerIds && editing.schedulerIds.length ? [...editing.schedulerIds] : [""],
+              }
+            : { name: "", destination: "", expiresHours: 24, expiresMinutes: 0, schedulerIds: [""] };
           initialRef.current = init;
           setName(init.name);
           setDestination(init.destination);
           setExpiresHours(init.expiresHours);
           setExpiresMinutes(init.expiresMinutes);
           setAssignedSchedulers(init.schedulerIds);
-          setToggleDestinationName(init.toggleDestinationName);
-          setToggleDestBracket(init.toggleDestBracket);
-          setPinInput(init.pinInput);
           setConfirmOpen(false);
         }, [open, editing]);
 
@@ -3586,20 +3539,9 @@
         // expires must be > 10 minutes total and <= 24 hours.
         const totalMinutes = (Number(expiresHours) || 0) * 60 + (Number(expiresMinutes) || 0);
         const timeOk = totalMinutes >= 10 && totalMinutes <= 24 * 60;
-        const pinDigits = pinInput.replace(/\D/g, "").slice(0, 4);
-        const pinOk = !editing || pinDigits.length === 4;
-        const validOk = Boolean(name.trim() && destination && timeOk && pinOk);
+        const validOk = Boolean(name.trim() && destination && timeOk);
         // Dirty check: compare current state vs. snapshot taken on open.
-        const currentSnap = {
-          name,
-          destination,
-          expiresHours,
-          expiresMinutes,
-          schedulerIds: assignedSchedulers,
-          toggleDestinationName,
-          toggleDestBracket,
-          pinInput,
-        };
+        const currentSnap = { name, destination, expiresHours, expiresMinutes, schedulerIds: assignedSchedulers };
         const dirty = initialRef.current ? JSON.stringify(currentSnap) !== JSON.stringify(initialRef.current) : false;
         const canSave = validOk && dirty;
 
@@ -3612,10 +3554,7 @@
             name: name.trim(),
             destination: destLabel,
             destValue: destination,
-            toggleDestination: editing
-              ? formatToggleDestinationStr(toggleDestinationName, toggleDestBracket)
-              : `Toggle-${Math.floor(Math.random() * 9000 + 1000)} [${Math.floor(Math.random() * 9000 + 1000)}]`,
-            togglePin: editing ? pinDigits.padStart(4, "0") : randomTogglePin(),
+            toggleDestination: editing?.toggleDestination || `Toggle-${Math.floor(Math.random() * 9000 + 1000)} [${Math.floor(Math.random() * 9000 + 1000)}]`,
             expiresHours: Number(expiresHours) || 0,
             expiresMinutes: Number(expiresMinutes) || 0,
             schedulerIds: pickedIds,
@@ -3635,7 +3574,7 @@
             onClose={requestClose}
             title="Away Mode Rule"
             width={524}
-            outerHeight={editing ? 640 : 500}
+            outerHeight={500}
             footer={
               <>
                 <Button variant="secondary" onClick={requestClose}>Cancel</Button>
@@ -3644,128 +3583,44 @@
             }
           >
             <div className="flex flex-col gap-5 py-4">
-              {!editing ? (
-                <>
-                  <div className="grid grid-cols-2 gap-4 items-start">
-                    <Input label="Rule name" required value={name} onChange={setName} placeholder="e.g. Reception Desk" />
-                    <Select
-                      label="Routing Destination"
-                      required
-                      value={destination}
-                      onChange={setDestination}
-                      options={destinationOptionsForModal}
-                      placeholder="Select destination…"
-                      className="min-w-0"
-                    />
-                  </div>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 w-full min-w-0">
-                    <div className="flex items-center gap-1 shrink-0">
-                      <span className="text-[14px] font-semibold leading-5 tracking-[0.018em] text-ink-700">Expires in</span>
-                      <PortalTooltip text={`Call routing returns to the scheduler’s rules after the selected time or when Away Mode is turned off manually.`} className="group">
-                        <Icon name="info-circle" size={16} className="text-ink-500 cursor-help group-hover:text-[#244C91] transition-colors" />
-                      </PortalTooltip>
-                    </div>
-                    <div className="flex flex-1 min-w-[120px] items-center gap-2">
-                      <NumberStepper fill value={expiresHours} onChange={setExpiresHours} min={0} max={24} />
-                      <span className="text-[14px] text-ink-700 shrink-0">Hours</span>
-                    </div>
-                    <div className="flex flex-1 min-w-[120px] items-center gap-2">
-                      <NumberStepper fill value={expiresMinutes} onChange={setExpiresMinutes} min={0} max={59} step={5} />
-                      <span className="text-[14px] text-ink-700 shrink-0">Minutes</span>
-                    </div>
-                  </div>
-                  {!timeOk && (name || destination) && (
-                    <div className="text-[12px] text-danger-500 -mt-3">
-                      {totalMinutes < 10
-                        ? "Expiration must be at least 10 minutes."
-                        : "Expiration cannot exceed 24 hours."}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2 px-4 py-1.5 bg-[#E8EDF5] rounded-lg">
-                    <Icon name="warning-circle" size={17} className="text-[#142B53] shrink-0" />
-                    <span className="text-[14px] font-semibold text-ink-900 tracking-[0.25px] leading-5">
-                      Save this rule to view the toggle destination details
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="grid grid-cols-2 gap-4 items-start">
-                    <Input label="Rule name" required value={name} onChange={setName} placeholder="e.g. Reception Desk" />
-                    <Select
-                      label="Routing Destination"
-                      required
-                      value={destination}
-                      onChange={setDestination}
-                      options={destinationOptionsForModal}
-                      placeholder="Select destination…"
-                      className="min-w-0"
-                    />
-                  </div>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 w-full min-w-0">
-                    <div className="flex items-center gap-1 shrink-0">
-                      <span className="text-[14px] font-semibold leading-5 tracking-[0.018em] text-ink-700">Expires in</span>
-                      <PortalTooltip text={`Call routing returns to the scheduler’s rules after the selected time or when Away Mode is turned off manually.`} className="group">
-                        <Icon name="info-circle" size={16} className="text-ink-500 cursor-help group-hover:text-[#244C91] transition-colors" />
-                      </PortalTooltip>
-                    </div>
-                    <div className="flex flex-1 min-w-[120px] items-center gap-2">
-                      <NumberStepper fill value={expiresHours} onChange={setExpiresHours} min={0} max={24} />
-                      <span className="text-[14px] text-ink-700 shrink-0">Hours</span>
-                    </div>
-                    <div className="flex flex-1 min-w-[120px] items-center gap-2">
-                      <NumberStepper fill value={expiresMinutes} onChange={setExpiresMinutes} min={0} max={59} step={5} />
-                      <span className="text-[14px] text-ink-700 shrink-0">Minutes</span>
-                    </div>
-                  </div>
-                  {!timeOk && (name || destination) && (
-                    <div className="text-[12px] text-danger-500 -mt-3">
-                      {totalMinutes < 10
-                        ? "Expiration must be at least 10 minutes."
-                        : "Expiration cannot exceed 24 hours."}
-                    </div>
-                  )}
-                  <hr className="border-ink-100" />
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[14px] font-semibold leading-5 tracking-[0.018em] text-ink-700">Toggle Destination</span>
-                    <div className="h-8 px-3 flex items-center text-[14px] leading-5 text-ink-900 bg-[#E5E6E8] border border-ink-200 rounded">
-                      {formatToggleDestinationStr(toggleDestinationName, toggleDestBracket) || "—"}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 min-[420px]:grid-cols-[minmax(0,1fr)_166px] gap-x-6 gap-y-4 items-start">
-                    <Input
-                      label="Toggle Destination Name"
-                      value={toggleDestinationName}
-                      onChange={setToggleDestinationName}
-                      placeholder=""
-                    />
-                    <div className="flex flex-col gap-1 min-w-0">
-                      <div className="flex items-center gap-1">
-                        <span className="text-[14px] font-semibold leading-5 tracking-[0.018em] text-ink-700">Toggle PIN</span>
-                        <PortalTooltip text="Share this PIN with the customer to enable them to activate Away Mode from their desk phone" className="group">
-                          <Icon name="info-circle" size={16} className="text-ink-500 cursor-help group-hover:text-[#244C91] transition-colors shrink-0" />
-                        </PortalTooltip>
-                      </div>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="off"
-                        value={pinInput}
-                        onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                        className={`h-8 px-3 py-1.5 text-[14px] leading-5 tracking-[0.018em] bg-white border rounded focus:outline-none focus:ring-0 tabular-nums ${
-                          editing && pinDigits.length > 0 && pinDigits.length < 4
-                            ? "border-[#B3261E] text-ink-900"
-                            : "border-ink-200 hover:border-ink-400 focus:border-primary-500 text-[#33414D]"
-                        }`}
-                        aria-invalid={editing && pinDigits.length > 0 && pinDigits.length < 4}
-                      />
-                    </div>
-                  </div>
-                  <hr className="border-ink-100" />
-                </>
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="Rule name" required value={name} onChange={setName} placeholder="e.g. Reception Desk" />
+                <Select
+                  label="Destination"
+                  required
+                  value={destination}
+                  onChange={setDestination}
+                  options={destinationOptionsForModal}
+                  placeholder="Select destination…"
+                />
+              </div>
+
+              {/* Expires in row */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-[14px] font-semibold leading-5 tracking-[0.018em] text-ink-700">Expires in</span>
+                  <PortalTooltip text={`Call routing returns to the scheduler’s rules after the selected time or when Away Mode is turned off manually.`} className="group">
+                    <Icon name="info-circle" size={16} className="text-ink-500 cursor-help group-hover:text-[#244C91] transition-colors" />
+                  </PortalTooltip>
+                </div>
+                <div className="flex items-center gap-2">
+                  <NumberStepper value={expiresHours} onChange={setExpiresHours} min={0} max={24} width={96} />
+                  <span className="text-[14px] text-ink-700">Hours</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <NumberStepper value={expiresMinutes} onChange={setExpiresMinutes} min={0} max={59} step={5} width={96} />
+                  <span className="text-[14px] text-ink-700">Minutes</span>
+                </div>
+              </div>
+              {!timeOk && (name || destination) && (
+                <div className="text-[12px] text-danger-500 -mt-3">
+                  {totalMinutes < 10
+                    ? "Expiration must be at least 10 minutes."
+                    : "Expiration cannot exceed 24 hours."}
+                </div>
               )}
 
-              {!editing && <hr className="border-ink-100" />}
+              <hr className="border-ink-100" />
 
               {/* Assigned schedulers */}
               <div className="flex flex-col gap-3">
@@ -6514,7 +6369,7 @@
                         : true;
                       const slotErr = slotHasStart && slotHasEnd && !slotRangeValid;
                       return (
-                        <div key={s.id} className="flex flex-col gap-2 rounded border border-ink-100 px-3 py-2">
+                        <div key={s.id} className="flex flex-col gap-2 rounded border border-ink-100 bg-ink-50/60 px-3 py-2">
                           <div className="flex items-center justify-between">
                             <span className="text-[14px] font-semibold text-ink-900">Slot {idx + 1}</span>
                             <IconButton name="trash" title="Remove" onClick={() => removeSlot(s.id)} />
