@@ -45,6 +45,7 @@
                 900: "#001221",
               },
               warning: { 50: "#FEF6DB", 500: "#FBBD00" },
+              error: { stroke: "#E7959B", hover: "#F7DCDE", 500: "#C70816" },
               success: { 50: "#DCF1E0", 700: "#066A18" },
               surface: "#FFFFFF",
               portal: "#F2F2F2",
@@ -95,12 +96,6 @@
       }
       /* Subtle row hover */
       .bvp-row-hover:hover { background-color: #F2F2F3; }
-      /* Holiday modal — all field labels black (ink-900) */
-      .bvp-holiday-modal label,
-      .bvp-holiday-modal .bvp-field-label,
-      .bvp-holiday-modal .bvp-modal-section-label {
-        color: #001221 !important;
-      }
       /* Annotation animations */
       @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
       .bvp-animate-in { animation: fadeIn 180ms ease-out; }
@@ -419,6 +414,7 @@
           secondary: "bg-white text-primary-500 border border-[#A3B6D7] hover:bg-primary-25 active:bg-primary-50 disabled:bg-[#E5E6E8] disabled:border-[#E5E6E8] disabled:text-[#4C5863]",
           ghost: "bg-transparent text-primary-500 hover:bg-primary-25 active:bg-primary-50 disabled:bg-[#E5E6E8] disabled:text-[#4C5863]",
           danger: "bg-white text-ink-600 hover:bg-ink-50 disabled:bg-[#E5E6E8] disabled:text-[#4C5863]",
+          error: "bg-white text-error-500 border border-error-stroke hover:bg-error-hover active:bg-[#FBD9D9] focus-visible:ring-error-500 disabled:bg-[#E5E6E8] disabled:border-[#E5E6E8] disabled:text-[#4C5863]",
         };
         return (
           <button type={type} onClick={onClick} disabled={disabled}
@@ -427,6 +423,85 @@
             <span>{children}</span>
             {iconRight && <Icon name={iconRight} size={size === "sm" ? 14 : 18} />}
           </button>
+        );
+      };
+
+      // Kebab menu for table ACTIONS columns; panel width fits its items.
+      const TableRowActionsMenu = ({
+        items,
+        ariaLabel = "Row actions",
+        triggerClassName = "w-8 h-8",
+      }) => {
+        const [open, setOpen] = useState(false);
+        const [pos, setPos] = useState({ top: 0, left: 0 });
+        const btnRef = useRef(null);
+        const menuRef = useRef(null);
+        const update = () => {
+          if (!btnRef.current) return;
+          const r = btnRef.current.getBoundingClientRect();
+          setPos({ top: r.bottom + 4, left: r.right });
+        };
+        useEffect(() => {
+          if (!open) return;
+          update();
+          const onDoc = (e) => {
+            if (btnRef.current?.contains(e.target)) return;
+            if (menuRef.current?.contains(e.target)) return;
+            setOpen(false);
+          };
+          const onScroll = () => update();
+          document.addEventListener("mousedown", onDoc);
+          window.addEventListener("scroll", onScroll, true);
+          window.addEventListener("resize", onScroll);
+          return () => {
+            document.removeEventListener("mousedown", onDoc);
+            window.removeEventListener("scroll", onScroll, true);
+            window.removeEventListener("resize", onScroll);
+          };
+        }, [open]);
+        return (
+          <>
+            <button
+              ref={btnRef}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setOpen((x) => !x); }}
+              aria-label={ariaLabel}
+              aria-expanded={open}
+              className={`inline-flex items-center justify-center rounded text-ink-700 hover:bg-ink-50 hover:text-primary-500 transition-colors bvp-focus ${open ? "bg-ink-50 text-primary-500" : ""} ${triggerClassName}`}
+            >
+              <Icon name="more-vert" size={20} />
+            </button>
+            {open && ReactDOM.createPortal(
+              <div
+                ref={menuRef}
+                style={{ top: pos.top, left: pos.left, transform: "translateX(-100%)" }}
+                onClick={(e) => e.stopPropagation()}
+                className="fixed z-[9999] w-max bg-white border border-ink-100 rounded shadow-dropdown py-1 bvp-animate-in"
+              >
+                {items.map((it) => (
+                  <button
+                    key={it.key}
+                    type="button"
+                    disabled={it.disabled}
+                    onClick={() => {
+                      if (it.disabled) return;
+                      setOpen(false);
+                      it.onClick?.();
+                    }}
+                    className={`flex w-full items-center gap-3 px-3 h-9 text-[14px] leading-4 whitespace-nowrap text-left ${
+                      it.disabled
+                        ? "text-ink-400 cursor-not-allowed"
+                        : "text-ink-900 hover:bg-ink-50"
+                    }`}
+                  >
+                    <Icon name={it.icon} size={16} className={`shrink-0 ${it.disabled ? "text-ink-400" : "text-ink-700"}`} />
+                    <span>{it.label}</span>
+                  </button>
+                ))}
+              </div>,
+              document.body
+            )}
+          </>
         );
       };
 
@@ -450,12 +525,10 @@
       );
 
       // Portal-based tooltip — escapes overflow:hidden ancestors and always sits on top.
-      const PortalTooltip = ({ text, lines, children, className = "" }) => {
+      const PortalTooltip = ({ text, children, className = "" }) => {
         const [visible, setVisible] = useState(false);
         const [pos, setPos] = useState({ top: 0, left: 0 });
         const ref = useRef(null);
-        const useLines = Array.isArray(lines) && lines.length > 0;
-        const tipLines = useLines ? lines : (text ? [text] : []);
         const update = () => {
           if (!ref.current) return;
           const r = ref.current.getBoundingClientRect();
@@ -469,28 +542,16 @@
               ref={ref}
               onMouseEnter={onEnter}
               onMouseLeave={onLeave}
-              className={`inline-block w-fit max-w-full ${className}`}
+              className={`inline-flex ${className}`}
             >
               {children}
             </span>
-            {visible && tipLines.length > 0 && ReactDOM.createPortal(
+            {visible && ReactDOM.createPortal(
               <div
-                className={`fixed z-[9999] pointer-events-none bg-ink-900 text-white text-[12px] px-2 py-1.5 rounded ${
-                  useLines
-                    ? "w-max max-w-none"
-                    : "max-w-[280px] whitespace-normal break-words leading-4"
-                }`}
+                className="fixed z-[9999] pointer-events-none max-w-[280px] whitespace-normal break-words bg-ink-900 text-white text-[12px] leading-4 px-2 py-1 rounded"
                 style={{ top: pos.top - 8, left: pos.left, transform: "translate(-50%, -100%)" }}
               >
-                {useLines ? (
-                  <div className="flex flex-col gap-1">
-                    {tipLines.map((line, i) => (
-                      <div key={i} className="whitespace-nowrap leading-4">{line}</div>
-                    ))}
-                  </div>
-                ) : (
-                  tipLines[0]
-                )}
+                {text}
                 <span className="absolute left-1/2 -translate-x-1/2 top-full -mt-px w-0 h-0 border-x-[5px] border-x-transparent border-t-[5px] border-t-ink-900" />
               </div>,
               document.body
@@ -556,21 +617,14 @@
         );
       };
 
-      const FieldLabel = ({ children, required }) => (
-        <div
-          className="text-[14px] font-semibold leading-5 tracking-[0.018em] text-ink-900 flex gap-0.5"
-          style={{ color: "#001221" }}
-        >
-          <span>{children}</span>
-          {required && <span className="text-[#D23C4A]">*</span>}
-        </div>
-      );
-
       // Text input (floating label style matches Figma Input component)
       const Input = ({ label, value, onChange, placeholder, required, assistive, className = "", disabled, error = false, inputClassName = "" }) => (
         <div className={`flex flex-col gap-1 ${className}`}>
           {label && (
-            <FieldLabel required={required}>{label}</FieldLabel>
+            <label className="text-[14px] font-semibold leading-5 tracking-[0.018em] text-ink-700 flex gap-0.5">
+              <span>{label}</span>
+              {required && <span className="text-[#D23C4A]">*</span>}
+            </label>
           )}
           <input
             type="text"
@@ -589,16 +643,8 @@
       );
 
       // Select dropdown (renders its menu via portal so it escapes any overflow:hidden/auto ancestors)
-      const Select = ({ label, value, onChange, options, placeholder, required, className = "", disabled, dirty, error = false, menuDataSlot, onDropdownClose }) => {
+      const Select = ({ label, value, onChange, options, placeholder, required, className = "", disabled, dirty, error = false }) => {
         const [open, setOpen] = useState(false);
-        const onDropdownCloseRef = useRef(onDropdownClose);
-        onDropdownCloseRef.current = onDropdownClose;
-        const closeDropdown = () => {
-          setOpen((wasOpen) => {
-            if (wasOpen) onDropdownCloseRef.current?.();
-            return false;
-          });
-        };
         const [search, setSearch] = useState("");
         const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
         const wrapRef = useRef(null);
@@ -620,7 +666,7 @@
           const onDoc = (e) => {
             if (wrapRef.current && wrapRef.current.contains(e.target)) return;
             if (menuRef.current && menuRef.current.contains(e.target)) return;
-            closeDropdown();
+            setOpen(false);
           };
           const onScroll = () => updatePos();
           document.addEventListener("mousedown", onDoc);
@@ -639,26 +685,22 @@
           ? options.filter((o) => (o.label || "").toLowerCase().includes(q))
           : options;
         return (
-          <div
-            className={`flex flex-col gap-1 ${className}`}
-            ref={wrapRef}
-          >
+          <div className={`flex flex-col gap-1 ${className}`} ref={wrapRef}>
             {label && (
-              <FieldLabel required={required}>{label}</FieldLabel>
+              <label className="text-[14px] font-semibold leading-5 tracking-[0.018em] text-ink-700 flex gap-0.5">
+                <span>{label}</span>
+                {required && <span className="text-[#D23C4A]">*</span>}
+              </label>
             )}
             <div
               ref={btnRef}
-              className={`relative h-8 border rounded ${
-                disabled
-                  ? "bg-ink-50 border-ink-200 cursor-not-allowed"
-                  : `bg-white ${
-                      error
-                        ? "border-[#B3261E]"
-                        : dirty
-                          ? "border-ink-500"
-                          : "border-ink-200"
-                    } ${error ? "hover:border-[#B3261E] focus-within:border-[#B3261E]" : "hover:border-ink-400 focus-within:border-primary-500"}`
-              }`}
+              className={`relative h-8 bg-white border rounded ${
+                error
+                  ? "border-[#B3261E]"
+                  : dirty
+                    ? "border-ink-500"
+                    : "border-ink-200"
+              } ${disabled ? "bg-ink-50" : error ? "hover:border-[#B3261E] focus-within:border-[#B3261E]" : "hover:border-ink-400 focus-within:border-primary-500"}`}
             >
               {open ? (
                 <input
@@ -667,7 +709,7 @@
                   value={search}
                   placeholder={selectedLabel}
                   onChange={(e) => setSearch(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); closeDropdown(); } }}
+                  onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); setOpen(false); } }}
                   className="w-full h-full pl-3 pr-8 bg-transparent text-[14px] leading-5 tracking-[0.018em] text-ink-900 placeholder:text-ink-400 focus:outline-none rounded"
                 />
               ) : (
@@ -675,13 +717,11 @@
                   type="button"
                   onClick={() => !disabled && setOpen(true)}
                   disabled={disabled}
-                  className={`w-full h-full pl-3 pr-8 text-left text-[14px] leading-5 tracking-[0.018em] focus:outline-none rounded flex items-center cursor-inherit ${
-                    disabled ? "text-ink-400" : selectedOption ? "text-ink-900" : "text-ink-400"
-                  }`}
+                  className="w-full h-full pl-3 pr-8 text-left text-[14px] leading-5 tracking-[0.018em] text-ink-900 disabled:text-ink-400 focus:outline-none rounded flex items-center"
                 >
                   <TruncationTooltip
                     text={selectedLabel}
-                    className="flex-1 min-w-0"
+                    className={`flex-1 min-w-0 ${selectedOption ? "" : "text-ink-400"}`}
                   />
                 </button>
               )}
@@ -692,7 +732,7 @@
                 onMouseDown={(e) => { e.preventDefault(); }}
                 onClick={() => { if (!disabled) setOpen((x) => !x); }}
                 disabled={disabled}
-                className={`absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center ${disabled ? "text-ink-300" : "text-ink-600"}`}
+                className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center text-ink-600 disabled:text-ink-400"
               >
                 <Icon name={open ? "chevron-up" : "chevron-down"} size={16} />
               </button>
@@ -700,7 +740,6 @@
             {open && ReactDOM.createPortal(
               <div
                 ref={menuRef}
-                {...(menuDataSlot ? { "data-holiday-slot-menu": menuDataSlot } : {})}
                 className="fixed z-[9999] bg-white border border-ink-100 rounded shadow-dropdown py-1 max-h-60 overflow-auto bvp-scroll bvp-animate-in"
                 style={{ top: pos.top, left: pos.left, width: pos.width }}
               >
@@ -734,7 +773,7 @@
                     out.push(
                       <div
                         key={o.value}
-                        onClick={() => { if (isDisabled) return; onChange?.(o.value); closeDropdown(); }}
+                        onClick={() => { if (isDisabled) return; onChange?.(o.value); setOpen(false); }}
                         className={`px-3 py-1.5 text-[14px] leading-5 flex items-center gap-2 ${
                           isDisabled
                             ? "cursor-not-allowed text-ink-400"
@@ -891,13 +930,7 @@
                 You have unsaved changes. Would you like to save before closing?
               </div>
               <div className="flex items-center justify-end gap-3 h-[68px] px-6 shrink-0 border-t border-ink-100">
-                <button
-                  type="button"
-                  onClick={onDiscard}
-                  className="inline-flex items-center justify-center h-9 px-3 rounded bg-white border border-[#C70816] text-[#C70816] text-[14px] leading-4 font-bold uppercase tracking-btn select-none transition-colors hover:bg-[#FDECEC] active:bg-[#FBD9D9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C70816] focus-visible:ring-offset-1"
-                >
-                  <span>Discard</span>
-                </button>
+                <Button variant="error" onClick={onDiscard}>Discard</Button>
                 <Button variant="primary" onClick={onSaveExit} disabled={!canSave}>Save &amp; Exit</Button>
               </div>
             </div>
@@ -977,11 +1010,11 @@
               movableDay: "",
               dates: ["2026-01-14"],
               timeConfig: "range",
-              slots: [{ id: "s1", start: "09:00 AM", end: "05:00 PM", dest: "holiday-2243" }],
+              slots: [{ id: "s1", start: "09:00 AM", end: "05:00 PM" }],
               tooltip: "One-time event, on January 14th 2026, from 9:00 AM to 5:00 PM",
             },
           ],
-          locationHolidays: ["lh1"], // refs
+          locationHolidays: ["lh-new-years"], // refs
         },
         {
           id: "ss",
@@ -995,7 +1028,7 @@
             { id: "ts4", days: "Monday - Friday", range: "1:00 PM - 5:00 PM", dest: "Front Desk [3390]" },
           ],
           customHolidays: [],
-          locationHolidays: ["lh3"],
+          locationHolidays: ["lh-labor"],
         },
         {
           id: "mo",
@@ -1006,7 +1039,7 @@
           awayRoute: "N/A",
           timeSlots: [],
           customHolidays: [],
-          locationHolidays: ["lh2", "lh3"],
+          locationHolidays: ["lh-christmas", "lh-labor"],
         },
       ];
 
@@ -1016,7 +1049,7 @@
       // location-holiday picker only uses name/when/tooltip.
       const locationHolidayCatalog = [
         {
-          id: "lh1",
+          id: "lh-new-years",
           name: "New Year's Day",
           when: "January 1 • All day",
           tooltip: "Occurs annually on January 1st and lasts all day",
@@ -1029,8 +1062,117 @@
           editSource: { recurrence: "yearly", dateConfig: "fixed", month: "1", day: 1, observeWeekday: true, timeConfig: "allday" },
         },
         {
-          id: "lh2",
-          name: "Christmas",
+          id: "lh-mlk",
+          name: "Martin Luther King Jr. Day",
+          when: "Third Monday of January • All day",
+          tooltip: "Occurs annually on the 3rd Monday of January and lasts all day",
+          datesOrDays: "Third Monday of January",
+          recurrence: "Yearly",
+          duration: "All day",
+          destination: "Holiday VM [8894]",
+          destValue: "holiday-2243",
+          editSource: { recurrence: "yearly", dateConfig: "movable", occurrence: "third", movableDay: "Monday", month: "1", timeConfig: "allday" },
+        },
+        {
+          id: "lh-presidents",
+          name: "Washington's Birthday (Presidents' Day)",
+          when: "Third Monday of February • All day",
+          tooltip: "Occurs annually on the 3rd Monday of February and lasts all day",
+          datesOrDays: "Third Monday of February",
+          recurrence: "Yearly",
+          duration: "All day",
+          destination: "Holiday VM [8894]",
+          destValue: "holiday-2243",
+          editSource: { recurrence: "yearly", dateConfig: "movable", occurrence: "third", movableDay: "Monday", month: "2", timeConfig: "allday" },
+        },
+        {
+          id: "lh-memorial",
+          name: "Memorial Day",
+          when: "Last Monday of May • All day",
+          tooltip: "Occurs annually on the last Monday of May and lasts all day",
+          datesOrDays: "Last Monday of May",
+          recurrence: "Yearly",
+          duration: "All day",
+          destination: "Holiday VM [8894]",
+          destValue: "holiday-2243",
+          editSource: { recurrence: "yearly", dateConfig: "movable", occurrence: "last", movableDay: "Monday", month: "5", timeConfig: "allday" },
+        },
+        {
+          id: "lh-juneteenth",
+          name: "Juneteenth National Independence Day",
+          when: "June 19 • All day",
+          tooltip: "Occurs annually on June 19th and lasts all day",
+          datesOrDays: "June 19th",
+          recurrence: "Yearly",
+          duration: "All day",
+          destination: "Holiday VM [8894]",
+          destValue: "holiday-2243",
+          editSource: { recurrence: "yearly", dateConfig: "fixed", month: "6", day: 19, observeWeekday: true, timeConfig: "allday" },
+        },
+        {
+          id: "lh-independence",
+          name: "Independence Day",
+          when: "July 4 • All day",
+          tooltip: "Occurs annually on July 4th and lasts all day",
+          datesOrDays: "July 4th",
+          recurrence: "Yearly",
+          duration: "All day",
+          destination: "Holiday VM [8894]",
+          destValue: "holiday-2243",
+          editSource: { recurrence: "yearly", dateConfig: "fixed", month: "7", day: 4, observeWeekday: true, timeConfig: "allday" },
+        },
+        {
+          id: "lh-labor",
+          name: "Labor Day",
+          when: "First Monday of September • All day",
+          tooltip: "Occurs annually on the 1st Monday of September and lasts all day",
+          datesOrDays: "First Monday of September",
+          recurrence: "Yearly",
+          duration: "All day",
+          destination: "Holiday VM [8894]",
+          destValue: "holiday-2243",
+          ongoing: true,
+          editSource: { recurrence: "yearly", dateConfig: "movable", occurrence: "first", movableDay: "Monday", month: "9", timeConfig: "allday" },
+        },
+        {
+          id: "lh-columbus",
+          name: "Columbus Day (Indigenous Peoples' Day)",
+          when: "Second Monday of October • All day",
+          tooltip: "Occurs annually on the 2nd Monday of October and lasts all day",
+          datesOrDays: "Second Monday of October",
+          recurrence: "Yearly",
+          duration: "All day",
+          destination: "Holiday VM [8894]",
+          destValue: "holiday-2243",
+          editSource: { recurrence: "yearly", dateConfig: "movable", occurrence: "second", movableDay: "Monday", month: "10", timeConfig: "allday" },
+        },
+        {
+          id: "lh-veterans",
+          name: "Veterans Day",
+          when: "November 11 • All day",
+          tooltip: "Occurs annually on November 11th and lasts all day",
+          datesOrDays: "November 11th",
+          recurrence: "Yearly",
+          duration: "All day",
+          destination: "Holiday VM [8894]",
+          destValue: "holiday-2243",
+          editSource: { recurrence: "yearly", dateConfig: "fixed", month: "11", day: 11, observeWeekday: true, timeConfig: "allday" },
+        },
+        {
+          id: "lh-thanksgiving",
+          name: "Thanksgiving Day",
+          when: "Fourth Thursday of November • All day",
+          tooltip: "Occurs annually on the 4th Thursday of November and lasts all day",
+          datesOrDays: "Fourth Thursday of November",
+          recurrence: "Yearly",
+          duration: "All day",
+          destination: "Holiday VM [8894]",
+          destValue: "holiday-2243",
+          editSource: { recurrence: "yearly", dateConfig: "movable", occurrence: "fourth", movableDay: "Thursday", month: "11", timeConfig: "allday" },
+        },
+        {
+          id: "lh-christmas",
+          name: "Christmas Day",
           when: "December 25 • All day",
           tooltip: "Occurs annually on December 25th and lasts all day",
           datesOrDays: "December 25th",
@@ -1039,19 +1181,6 @@
           destination: "Holiday VM [8894]",
           destValue: "holiday-2243",
           editSource: { recurrence: "yearly", dateConfig: "fixed", month: "12", day: 25, observeWeekday: true, timeConfig: "allday" },
-        },
-        {
-          id: "lh3",
-          name: "Labour Day",
-          when: "First Monday of August • All day",
-          tooltip: "Occurs annually on the 1st Monday of August and lasts all day",
-          datesOrDays: "First Monday of August",
-          recurrence: "Yearly",
-          duration: "All day",
-          destination: "Holiday Greeting [2243]",
-          destValue: "holiday-2243",
-          ongoing: true,
-          editSource: { recurrence: "yearly", dateConfig: "movable", occurrence: "first", movableDay: "Monday", month: "8", timeConfig: "allday" },
         },
         {
           id: "lh4",
@@ -1063,7 +1192,7 @@
           duration: "9:00 AM - 5:00 PM",
           destination: "Holiday VM [8894]",
           destValue: "holiday-2243",
-          editSource: { recurrence: "one-time", dateConfig: "fixed", dates: ["2026-01-14"], timeConfig: "range", slots: [{ id: "s1", start: "09:00 AM", end: "05:00 PM", dest: "holiday-2243" }] },
+          editSource: { recurrence: "one-time", dateConfig: "fixed", dates: ["2026-01-14"], timeConfig: "range", slots: [{ id: "s1", start: "09:00 AM", end: "05:00 PM" }] },
         },
         {
           id: "lh5",
@@ -1075,7 +1204,7 @@
           duration: "8:00 AM - 7:00 PM",
           destination: "Holiday VM [8894]",
           destValue: "holiday-2243",
-          editSource: { recurrence: "one-time", dateConfig: "fixed", dates: ["2026-08-14"], timeConfig: "range", slots: [{ id: "s1", start: "08:00 AM", end: "07:00 PM", dest: "holiday-2243" }] },
+          editSource: { recurrence: "one-time", dateConfig: "fixed", dates: ["2026-08-14"], timeConfig: "range", slots: [{ id: "s1", start: "08:00 AM", end: "07:00 PM" }] },
         },
       ];
 
@@ -1196,6 +1325,22 @@
        *  Derive the display fields (Dates/Days, Recurrence, Duration, …)
        *  from the raw shape the CustomHolidayModal emits.
        * ===================================================== */
+      const filterValidLocationHolidayIds = (ids, catalog) => {
+        const valid = new Set((catalog || []).map((h) => h.id));
+        return (ids || []).filter((id) => valid.has(id));
+      };
+
+      const pruneSchedulersLocationHolidays = (schedulers, catalog) => {
+        let changed = false;
+        const next = schedulers.map((s) => {
+          const filtered = filterValidLocationHolidayIds(s.locationHolidays, catalog);
+          if (filtered.length === (s.locationHolidays || []).length) return s;
+          changed = true;
+          return { ...s, locationHolidays: filtered };
+        });
+        return changed ? next : schedulers;
+      };
+
       const monthFullName = (m) => ["January","February","March","April","May","June","July","August","September","October","November","December"][parseInt(m, 10) - 1] || "";
       const ordinalNumber = (n) => {
         const v = parseInt(n, 10); if (isNaN(v)) return "";
@@ -1231,46 +1376,7 @@
         if (d.timeConfig !== "range") return "All day";
         if (!d.slots || !d.slots.length) return "All day";
         if (d.slots.length === 1) return `${d.slots[0].start} - ${d.slots[0].end}`;
-        return "Multiple time slots";
-      };
-
-      const destinationLabelForValue = (value) =>
-        destinationOptions.find((o) => o.value === value)?.label ?? "";
-
-      const formatHolidaySlotTip = (s, includeDestination = true) => {
-        const timeRange = `${s.start} - ${s.end}`;
-        if (!includeDestination) return timeRange;
-        const destLbl = destinationLabelForValue(s.dest ?? s.destValue) || "—";
-        return `${timeRange} → ${destLbl}`;
-      };
-
-      const holidaySlotsFromRecord = (record) => record?.editSource?.slots || record?.slots || [];
-
-      const slotsShareSameDestination = (slots) => {
-        if (!slots?.length) return true;
-        const values = slots.map((s) => s.dest ?? s.destValue).filter(Boolean);
-        if (!values.length) return true;
-        return new Set(values).size <= 1;
-      };
-
-      const buildSlotTooltipLines = (slots, { forceDestination = false } = {}) => {
-        const includeDest = forceDestination || !slotsShareSameDestination(slots);
-        return (slots || []).map((s) => formatHolidaySlotTip(s, includeDest));
-      };
-
-      const holidayTimeSlotsTooltipLines = (record) =>
-        buildSlotTooltipLines(holidaySlotsFromRecord(record));
-
-      const holidayDestSlotsTooltipLines = (record) =>
-        buildSlotTooltipLines(holidaySlotsFromRecord(record), { forceDestination: true });
-
-      const hasMultipleHolidayDestinations = (record) => {
-        const label = record?.destination || record?.dest || "";
-        if (label === "Multiple destinations") return true;
-        const slots = holidaySlotsFromRecord(record);
-        if (slots.length < 2) return false;
-        const values = slots.map((s) => s.dest ?? s.destValue).filter(Boolean);
-        return new Set(values).size > 1;
+        return `${d.slots[0].start} - ${d.slots[0].end} +${d.slots.length - 1} more`;
       };
 
       const extractEditSource = (d) => ({
@@ -1299,13 +1405,70 @@
         const [editingScheduler, setEditingScheduler] = useState(null); // null = new
         const [toast, setToast] = useState(null);
         const [activeTab, setActiveTab] = useState("schedulers");
+        const activeTabRef = useRef(activeTab);
+        const skipNextHistoryPush = useRef(false);
+        const hasMounted = useRef(false);
+        useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
+
+        // Browser back/forward navigates between tabs. A "trap" history entry
+        // sits below the initial view so the first back press bounces the user
+        // forward instead of leaving the page; only a hard refresh exits.
+        useEffect(() => {
+          const VALID_TABS = ["schedulers", "dids", "location-holidays", "away-mode", "fax-numbers", "remote-e911"];
+          const fromHash = window.location.hash.replace(/^#\/?/, "");
+          const initial = VALID_TABS.includes(fromHash) ? fromHash : "schedulers";
+          window.history.replaceState({ prototype: true, trap: true }, "", `#/${initial}`);
+          window.history.pushState({ prototype: true, tab: initial }, "", `#/${initial}`);
+          if (initial !== activeTabRef.current) {
+            skipNextHistoryPush.current = true;
+            setActiveTab(initial);
+          }
+          const onPop = (e) => {
+            const st = e.state;
+            if (st && st.trap) {
+              window.history.pushState(
+                { prototype: true, tab: activeTabRef.current },
+                "",
+                `#/${activeTabRef.current}`
+              );
+              return;
+            }
+            if (st && VALID_TABS.includes(st.tab)) {
+              skipNextHistoryPush.current = true;
+              setActiveTab(st.tab);
+            }
+          };
+          window.addEventListener("popstate", onPop);
+          return () => window.removeEventListener("popstate", onPop);
+        }, []);
+
+        // Push a history entry when the user changes tabs via the UI. Skip
+        // changes triggered by popstate or the very first render.
+        useEffect(() => {
+          if (!hasMounted.current) {
+            hasMounted.current = true;
+            return;
+          }
+          if (skipNextHistoryPush.current) {
+            skipNextHistoryPush.current = false;
+            return;
+          }
+          window.history.pushState({ prototype: true, tab: activeTab }, "", `#/${activeTab}`);
+        }, [activeTab]);
+
         const [highlightedIds, setHighlightedIds] = useState({}); // { [id]: true } while in 5s intermediate state
-        // Table rows that should briefly flash #FEF6DB after being created or
+        // Table rows that should briefly flash #E8EDF5 after being created or
         // edited, keyed by the row's unique id (DID number / holiday id / rule id).
         const [highlightedRowIds, setHighlightedRowIds] = useState({});
         const [changeSchedulerModal, setChangeSchedulerModal] = useState({ open: false, didNumber: null });
         const [locationHolidays, setLocationHolidays] = useState(locationHolidayCatalog);
         const [locationHolidayEditor, setLocationHolidayEditor] = useState({ open: false, editing: null });
+
+        // Drop location-holiday refs on schedulers when the catalog no longer contains them.
+        useEffect(() => {
+          setSchedulers((ss) => pruneSchedulersLocationHolidays(ss, locationHolidays));
+        }, [locationHolidays]);
+
         const [awayRules, setAwayRules] = useState(seedAwayRules);
         const [awayModal, setAwayModal] = useState({ open: false, editing: null });
         const [faxRows, setFaxRows] = useState(faxNumberSeed);
@@ -1331,7 +1494,7 @@
           }, 2000);
         };
 
-        // Flash a table row with #FEF6DB for 1 second after it is created or
+        // Flash a table row with #E8EDF5 for 1 second after it is created or
         // edited. Used by the DIDs, Location Holidays, and Away Mode tables.
         const highlightRow = (id) => {
           if (id == null) return;
@@ -1440,19 +1603,23 @@
         };
 
         const onSaveScheduler = (data) => {
+          const payload = {
+            ...data,
+            locationHolidays: filterValidLocationHolidayIds(data.locationHolidays, locationHolidays),
+          };
           // An existing scheduler is one being edited AND already in the list (has a real id).
           const isExisting = editingScheduler && editingScheduler.id && schedulers.some((x) => x.id === editingScheduler.id);
           if (isExisting) {
             const prevAssignedTo = editingScheduler.assignedTo || "";
             setSchedulers((ss) => ss.map((s) => {
-              if (s.id === editingScheduler.id) return { ...s, ...data };
+              if (s.id === editingScheduler.id) return { ...s, ...payload };
               // If we're setting this scheduler as default, unset any other default.
               if (data.isDefault) return { ...s, isDefault: false };
               return s;
             }));
-            syncDIDsForScheduler(editingScheduler.id, data.assignedTo, prevAssignedTo, data.defaultRoute);
+            syncDIDsForScheduler(editingScheduler.id, payload.assignedTo, prevAssignedTo, payload.defaultRoute);
             highlight(editingScheduler.id);
-            showToast(`Saved changes to "${data.name}"`);
+            showToast(`Saved changes to "${payload.name}"`);
           } else {
             // New scheduler (including from duplicate flow). Carry over any preserved
             // fields from the draft (defaultRoute, timeSlots, holidays, etc.) then apply form data.
@@ -1463,7 +1630,7 @@
             const mustBeDefault = schedulers.length === 0;
             const newS = {
               ...base,
-              ...data,
+              ...payload,
               id: newId,
               name: data.name || "New Scheduler",
               isDefault: mustBeDefault ? true : !!data.isDefault,
@@ -1476,7 +1643,7 @@
               const cleared = newS.isDefault ? ss.map((s) => ({ ...s, isDefault: false })) : ss;
               return [newS, ...cleared];
             });
-            syncDIDsForScheduler(newId, data.assignedTo, "", data.defaultRoute);
+            syncDIDsForScheduler(newId, payload.assignedTo, "", payload.defaultRoute);
             // New schedulers land with Time slots and Holidays sections collapsed.
             setExpandedSection((e) => ({ ...e, [`${newId}-ts`]: false, [`${newId}-h`]: false }));
             highlight(newId);
@@ -1544,12 +1711,9 @@
                               title: "Delete Location Holiday",
                               itemName: h.name,
                               onConfirm: () => {
-                                setLocationHolidays((hs) => hs.filter((x) => x.id !== id));
-                                // Also remove reference from any schedulers that had it
-                                setSchedulers((ss) => ss.map((s) => ({
-                                  ...s,
-                                  locationHolidays: (s.locationHolidays || []).filter((lid) => lid !== id),
-                                })));
+                                const nextCatalog = locationHolidays.filter((x) => x.id !== id);
+                                setLocationHolidays(nextCatalog);
+                                setSchedulers((ss) => pruneSchedulersLocationHolidays(ss, nextCatalog));
                                 showToast(`Deleted "${h.name}"`);
                                 closeDeleteConfirm();
                               },
@@ -2038,65 +2202,16 @@
        *  DIDs TAB (main content)
        * ===================================================== */
 
-      // Row-level kebab menu rendered via portal to escape table overflow.
-      const DIDRowMenu = ({ did, onChangeScheduler }) => {
-        const [open, setOpen] = useState(false);
-        const [pos, setPos] = useState({ top: 0, left: 0 });
-        const btnRef = useRef(null);
-        const menuRef = useRef(null);
-        const update = () => {
-          if (!btnRef.current) return;
-          const r = btnRef.current.getBoundingClientRect();
-          setPos({ top: r.bottom + 4, left: r.right - 176 });
-        };
-        useEffect(() => {
-          if (!open) return;
-          update();
-          const onDoc = (e) => {
-            if (btnRef.current && btnRef.current.contains(e.target)) return;
-            if (menuRef.current && menuRef.current.contains(e.target)) return;
-            setOpen(false);
-          };
-          const onScroll = () => update();
-          document.addEventListener("mousedown", onDoc);
-          window.addEventListener("scroll", onScroll, true);
-          window.addEventListener("resize", onScroll);
-          return () => {
-            document.removeEventListener("mousedown", onDoc);
-            window.removeEventListener("scroll", onScroll, true);
-            window.removeEventListener("resize", onScroll);
-          };
-        }, [open]);
-        return (
-          <>
-            <button
-              ref={btnRef}
-              type="button"
-              onClick={() => setOpen((x) => !x)}
-              aria-label="Row actions"
-              className={`inline-flex items-center justify-center w-8 h-8 rounded text-ink-700 hover:bg-ink-50 hover:text-primary-500 transition-colors ${open ? "bg-ink-50 text-primary-500" : ""}`}
-            >
-              <Icon name="more-vert" size={20} />
-            </button>
-            {open && ReactDOM.createPortal(
-              <div
-                ref={menuRef}
-                className="fixed z-[9999] bg-white border border-ink-100 rounded shadow-dropdown py-1 bvp-animate-in"
-                style={{ top: pos.top, left: pos.left, width: 176 }}
-              >
-                <div
-                  onClick={() => { onChangeScheduler(did.number); setOpen(false); }}
-                  className="px-3 py-2 text-[14px] text-ink-900 cursor-pointer bvp-row-hover flex items-center gap-3"
-                >
-                  <Icon name="edit" size={16} className="text-ink-700" />
-                  <span>Change Scheduler</span>
-                </div>
-              </div>,
-              document.body
-            )}
-          </>
-        );
-      };
+      const DIDRowMenu = ({ did, onChangeScheduler }) => (
+        <TableRowActionsMenu
+          items={[{
+            key: "change-scheduler",
+            icon: "edit",
+            label: "Change Scheduler",
+            onClick: () => onChangeScheduler(did.number),
+          }]}
+        />
+      );
 
       // Lightweight dropdown for the assigned-scheduler header filter.
       const HeaderFilter = ({ label, options, value, onChange }) => {
@@ -2231,7 +2346,7 @@
               className="flex items-center gap-1 text-[12px] font-bold uppercase tracking-[0.06em] text-ink-900 hover:text-primary-500"
             >
               <span>{label}</span>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className={active ? "text-primary-500" : "text-[#7F888F]"}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className={active ? "text-ink-900" : "text-[#7F888F]"}>
                 {active && sortBy.dir === "desc"
                   ? <path d="M7 10L12 15L17 10H7Z"/>
                   : <path d="M7 14L12 9L17 14H7Z"/>}
@@ -2303,7 +2418,7 @@
                     pageRows.map((d, i) => (
                       <div
                         key={d.number}
-                        className={`grid grid-cols-[repeat(3,minmax(0,1fr))_90px] h-[52px] items-center ${i < pageRows.length - 1 ? "border-b border-ink-100" : ""} ${highlightedRowIds[d.number] ? "bg-[#FEF6DB]" : "hover:bg-ink-50/50"} transition-colors`}
+                        className={`grid grid-cols-[repeat(3,minmax(0,1fr))_90px] h-[52px] items-center ${i < pageRows.length - 1 ? "border-b border-ink-100" : ""} ${highlightedRowIds[d.number] ? "bg-[#E8EDF5]" : "hover:bg-ink-50/50"} transition-colors`}
                       >
                         <div className="pl-7 pr-3 text-[14px] text-ink-900 min-w-0">
                           <TruncationTooltip text={d.number} display={highlightMatch(d.number, search)} className="w-full" />
@@ -2455,72 +2570,75 @@
        *  LOCATION HOLIDAYS TAB
        * ===================================================== */
 
-      // Row-level kebab menu: Edit / Delete
-      const LocationHolidayRowMenu = ({ holiday, onEdit, onDelete }) => {
-        const [open, setOpen] = useState(false);
-        const [pos, setPos] = useState({ top: 0, left: 0 });
-        const btnRef = useRef(null);
+      const LocationHolidayRowMenu = ({ holiday, onEdit, onDelete }) => (
+        <TableRowActionsMenu
+          items={[
+            { key: "edit", icon: "edit", label: "Edit", onClick: () => onEdit(holiday) },
+            { key: "delete", icon: "trash", label: "Delete", onClick: () => onDelete(holiday.id) },
+          ]}
+        />
+      );
 
-        const toggle = (e) => {
-          e.stopPropagation();
-          if (!open && btnRef.current) {
-            const r = btnRef.current.getBoundingClientRect();
-            setPos({ top: r.bottom + 4, left: r.right - 188 });
+      // Resolve a holiday to a {month, day} tuple in calendar order (1-based month).
+      // Movable holidays (e.g. "First Monday of September") are pinned to the current
+      // year so they sort into the right slot. Returns null when no date is known.
+      const holidayCalendarKey = (h) => {
+        const es = h.editSource;
+        if (!es) return null;
+        if (es.recurrence === "one-time" && Array.isArray(es.dates) && es.dates.length) {
+          const [, mStr, dStr] = es.dates[0].split("-");
+          const m = parseInt(mStr, 10);
+          const d = parseInt(dStr, 10);
+          if (m && d) return { month: m, day: d };
+          return null;
+        }
+        if (es.dateConfig === "fixed") {
+          const m = parseInt(es.month, 10);
+          const d = parseInt(es.day, 10);
+          if (m && d) return { month: m, day: d };
+          return null;
+        }
+        if (es.dateConfig === "movable") {
+          const m = parseInt(es.month, 10);
+          const weekdayIdx = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].indexOf(es.movableDay);
+          if (!m || weekdayIdx < 0) return null;
+          const year = new Date().getFullYear();
+          const lastDay = new Date(year, m, 0).getDate();
+          if (es.occurrence === "last") {
+            for (let d = lastDay; d >= 1; d--) {
+              if (new Date(year, m - 1, d).getDay() === weekdayIdx) return { month: m, day: d };
+            }
+            return null;
           }
-          setOpen((o) => !o);
-        };
-
-        useEffect(() => {
-          if (!open) return;
-          const onDoc = () => setOpen(false);
-          const onKey = (e) => e.key === "Escape" && setOpen(false);
-          document.addEventListener("click", onDoc);
-          document.addEventListener("keydown", onKey);
-          return () => { document.removeEventListener("click", onDoc); document.removeEventListener("keydown", onKey); };
-        }, [open]);
-
-        const menu = open ? ReactDOM.createPortal(
-          <div
-            style={{ position: "fixed", top: pos.top, left: pos.left }}
-            onClick={(e) => e.stopPropagation()}
-            className="z-[100] w-[188px] bg-white rounded-md shadow-dropdown border border-ink-100 py-1 bvp-animate-in"
-          >
-            <button
-              onClick={() => { setOpen(false); onEdit(holiday); }}
-              className="w-full px-3 h-9 flex items-center gap-3 text-[14px] text-ink-900 hover:bg-ink-50"
-            >
-              <Icon name="edit" size={16} className="text-ink-700" />
-              <span>Edit</span>
-            </button>
-            <button
-              onClick={() => { setOpen(false); onDelete(holiday.id); }}
-              className="w-full px-3 h-9 flex items-center gap-3 text-[14px] text-ink-900 hover:bg-ink-50"
-            >
-              <Icon name="trash" size={16} className="text-ink-700" />
-              <span>Delete</span>
-            </button>
-          </div>,
-          document.body
-        ) : null;
-
-        return (
-          <>
-            <button
-              ref={btnRef}
-              onClick={toggle}
-              className={`w-8 h-8 inline-flex items-center justify-center rounded ${open ? "bg-ink-100" : "hover:bg-ink-50"} text-ink-700`}
-              aria-label="Row actions"
-            >
-              <Icon name="more-vert" size={20} />
-            </button>
-            {menu}
-          </>
-        );
+          const occMap = { first: 1, second: 2, third: 3, fourth: 4 };
+          const n = occMap[es.occurrence] || 1;
+          let count = 0;
+          for (let d = 1; d <= lastDay; d++) {
+            if (new Date(year, m - 1, d).getDay() === weekdayIdx) {
+              count++;
+              if (count === n) return { month: m, day: d };
+            }
+          }
+        }
+        return null;
       };
+
+      // Sort holidays in calendar order (Jan → Dec). Items without a resolvable
+      // date land at the bottom, preserving their relative order.
+      const sortHolidaysChronologically = (rows) =>
+        [...rows].sort((a, b) => {
+          const ka = holidayCalendarKey(a);
+          const kb = holidayCalendarKey(b);
+          if (!ka && !kb) return 0;
+          if (!ka) return 1;
+          if (!kb) return -1;
+          return ka.month - kb.month || ka.day - kb.day;
+        });
 
       const LocationHolidaysTab = ({ locationHolidays, schedulers, onNew, onEdit, onDelete, highlightedRowIds = {} }) => {
         const [search, setSearch] = useState("");
-        // Default order: unsorted (reflects insertion order — last added at top)
+        // Default order: chronological (January → December). Clicking a column header
+        // switches to that field's sort; clicking the active header toggles direction.
         const [sortBy, setSortBy] = useState({ field: null, dir: "asc" });
         const [rowsPerPage, setRowsPerPage] = useState(10);
         const [page, setPage] = useState(1);
@@ -2560,6 +2678,8 @@
               const c = av.localeCompare(bv);
               return sortBy.dir === "asc" ? c : -c;
             });
+          } else {
+            rows = sortHolidaysChronologically(rows);
           }
           return rows;
         }, [enriched, search, sortBy]);
@@ -2586,7 +2706,7 @@
               className="flex items-center gap-1 text-[12px] font-bold uppercase tracking-[0.06em] text-ink-900 hover:text-primary-500"
             >
               <span>{label}</span>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className={active ? "text-primary-500" : "text-[#7F888F]"}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className={active ? "text-ink-900" : "text-[#7F888F]"}>
                 {active && sortBy.dir === "desc"
                   ? <path d="M7 10L12 15L17 10H7Z"/>
                   : <path d="M7 14L12 9L17 14H7Z"/>}
@@ -2628,12 +2748,7 @@
             </div>
 
             {isEmpty ? (
-              <div className="mt-8 py-20 flex flex-col items-center gap-5">
-                <div className="w-[72px] h-[72px] rounded-full bg-ink-50 flex items-center justify-center">
-                  <Icon name="holiday" size={38} className="text-ink-700" />
-                </div>
-                <div className="text-center text-[14px] text-ink-700">There are no holidays at this location yet</div>
-              </div>
+              <LocationHolidaysEmptyState className="mt-8 py-20" />
             ) : (
               <div className="mt-6">
                 {/* Table */}
@@ -2656,7 +2771,7 @@
                       return (
                       <div
                         key={h.id}
-                        className={`grid grid-cols-[repeat(6,minmax(0,1fr))_90px] h-[52px] items-center ${i < pageRows.length - 1 ? "border-b border-ink-100" : ""} ${highlightedRowIds[h.id] ? "bg-[#FEF6DB]" : "hover:bg-ink-50/50"} transition-colors`}
+                        className={`grid grid-cols-[repeat(6,minmax(0,1fr))_90px] h-[52px] items-center ${i < pageRows.length - 1 ? "border-b border-ink-100" : ""} ${highlightedRowIds[h.id] ? "bg-[#E8EDF5]" : "hover:bg-ink-50/50"} transition-colors`}
                       >
                         <div className="pl-7 pr-3 text-[14px] text-ink-900 min-w-0">
                           <TruncationTooltip text={h.name} display={highlightMatch(h.name, search)} className="w-full" />
@@ -2668,35 +2783,10 @@
                           <TruncationTooltip text={h.recurrence} className="w-full" />
                         </div>
                         <div className="px-3 text-[14px] text-ink-700 min-w-0">
-                          {(() => {
-                            const slots = holidaySlotsFromRecord(h);
-                            const hasMultipleSlots = slots.length > 1;
-                            const durationDisplay = hasMultipleSlots ? "Multiple time slots" : h.duration;
-                            const slotsTooltipLines = hasMultipleSlots ? holidayTimeSlotsTooltipLines(h) : null;
-                            if (hasMultipleSlots) {
-                              return (
-                                <PortalTooltip lines={slotsTooltipLines}>
-                                  <span className="cursor-help truncate block">{durationDisplay}</span>
-                                </PortalTooltip>
-                              );
-                            }
-                            return <TruncationTooltip text={durationDisplay} className="w-full" />;
-                          })()}
+                          <TruncationTooltip text={h.duration} className="w-full" />
                         </div>
                         <div className="px-3 text-[14px] text-ink-700 min-w-0">
-                          {(() => {
-                            const hasMultipleDests = hasMultipleHolidayDestinations(h);
-                            const destDisplay = hasMultipleDests ? "Multiple destinations" : h.destination;
-                            const destTooltipLines = hasMultipleDests ? holidayDestSlotsTooltipLines(h) : null;
-                            if (hasMultipleDests && destTooltipLines?.length) {
-                              return (
-                                <PortalTooltip lines={destTooltipLines} className="w-fit">
-                                  <span className="cursor-help">{destDisplay}</span>
-                                </PortalTooltip>
-                              );
-                            }
-                            return <TruncationTooltip text={destDisplay} className="w-full" />;
-                          })()}
+                          <TruncationTooltip text={h.destination} className="w-full" />
                         </div>
                         <div className="px-3 text-[14px] text-ink-700 min-w-0">
                           {h.assignedSchedulers.length === 0
@@ -2793,56 +2883,14 @@
        *  AWAY MODE TAB
        * ===================================================== */
 
-      const AwayModeRowMenu = ({ rule, onEdit, onDelete }) => {
-        const [open, setOpen] = useState(false);
-        const [pos, setPos] = useState({ top: 0, left: 0 });
-        const btnRef = useRef(null);
-        const toggle = (e) => {
-          e.stopPropagation();
-          if (!open && btnRef.current) {
-            const r = btnRef.current.getBoundingClientRect();
-            setPos({ top: r.bottom + 4, left: r.right - 188 });
-          }
-          setOpen((o) => !o);
-        };
-        useEffect(() => {
-          if (!open) return;
-          const onDoc = () => setOpen(false);
-          const onKey = (e) => e.key === "Escape" && setOpen(false);
-          document.addEventListener("click", onDoc);
-          document.addEventListener("keydown", onKey);
-          return () => { document.removeEventListener("click", onDoc); document.removeEventListener("keydown", onKey); };
-        }, [open]);
-        const menu = open ? ReactDOM.createPortal(
-          <div
-            style={{ position: "fixed", top: pos.top, left: pos.left }}
-            onClick={(e) => e.stopPropagation()}
-            className="z-[100] w-[188px] bg-white rounded-md shadow-dropdown border border-ink-100 py-1 bvp-animate-in"
-          >
-            <button onClick={() => { setOpen(false); onEdit(rule); }}
-              className="w-full px-3 h-9 flex items-center gap-3 text-[14px] text-ink-900 hover:bg-ink-50">
-              <Icon name="edit" size={16} className="text-ink-700" />
-              <span>Edit</span>
-            </button>
-            <button onClick={() => { setOpen(false); onDelete(rule.id); }}
-              className="w-full px-3 h-9 flex items-center gap-3 text-[14px] text-ink-900 hover:bg-ink-50">
-              <Icon name="trash" size={16} className="text-ink-700" />
-              <span>Delete</span>
-            </button>
-          </div>,
-          document.body
-        ) : null;
-        return (
-          <>
-            <button ref={btnRef} onClick={toggle}
-              className={`w-8 h-8 inline-flex items-center justify-center rounded ${open ? "bg-ink-100" : "hover:bg-ink-50"} text-ink-700`}
-              aria-label="Row actions">
-              <Icon name="more-vert" size={20} />
-            </button>
-            {menu}
-          </>
-        );
-      };
+      const AwayModeRowMenu = ({ rule, onEdit, onDelete }) => (
+        <TableRowActionsMenu
+          items={[
+            { key: "edit", icon: "edit", label: "Edit", onClick: () => onEdit(rule) },
+            { key: "delete", icon: "trash", label: "Delete", onClick: () => onDelete(rule.id) },
+          ]}
+        />
+      );
 
       const AwayModeTab = ({ awayRules, schedulers, onNew, onEdit, onDelete, highlightedRowIds = {} }) => {
         const [search, setSearch] = useState("");
@@ -2904,7 +2952,7 @@
             <button onClick={() => toggleSort(field)}
               className="flex items-center gap-1 text-[12px] font-bold uppercase tracking-[0.06em] text-ink-900 hover:text-primary-500">
               <span>{label}</span>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className={active ? "text-primary-500" : "text-[#7F888F]"}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className={active ? "text-ink-900" : "text-[#7F888F]"}>
                 {active && sortBy.dir === "desc"
                   ? <path d="M7 10L12 15L17 10H7Z"/>
                   : <path d="M7 14L12 9L17 14H7Z"/>}
@@ -2970,7 +3018,7 @@
                   ) : (
                     pageRows.map((r, i) => (
                       <div key={r.id}
-                        className={`grid grid-cols-[repeat(5,minmax(0,1fr))_90px] h-[52px] items-center ${i < pageRows.length - 1 ? "border-b border-ink-100" : ""} ${highlightedRowIds[r.id] ? "bg-[#FEF6DB]" : "hover:bg-ink-50/50"} transition-colors`}>
+                        className={`grid grid-cols-[repeat(5,minmax(0,1fr))_90px] h-[52px] items-center ${i < pageRows.length - 1 ? "border-b border-ink-100" : ""} ${highlightedRowIds[r.id] ? "bg-[#E8EDF5]" : "hover:bg-ink-50/50"} transition-colors`}>
                         <div className="pl-4 pr-3 text-[14px] text-ink-900 min-w-0">
                           <TruncationTooltip text={r.name} display={highlightMatch(r.name, search)} className="w-full" />
                         </div>
@@ -3186,82 +3234,18 @@
         { id: "fax-5", number: "(203) 616-7819", device: "",                                  efaxId: null,     sendEfaxOnly: "no", faxRetryWait: "30", faxRetryAttempts: "3" },
       ];
 
-      // Portal-based 3-dot menu shown beside the eFax Account dropdown.
-      // Adopts the same look as other row-level kebab menus in the prototype
-      // and offers Add Account / Edit Account / Delete Account.
       const EFaxKebabMenu = ({ entry, onAdd, onEdit, onDelete }) => {
-        const [open, setOpen] = useState(false);
-        const [pos, setPos] = useState({ top: 0, left: 0 });
-        const btnRef = useRef(null);
-        const menuRef = useRef(null);
-        const update = () => {
-          if (!btnRef.current) return;
-          const r = btnRef.current.getBoundingClientRect();
-          setPos({ top: r.bottom + 4, left: r.right - 180 });
-        };
-        useEffect(() => {
-          if (!open) return;
-          update();
-          const onDoc = (e) => {
-            if (btnRef.current && btnRef.current.contains(e.target)) return;
-            if (menuRef.current && menuRef.current.contains(e.target)) return;
-            setOpen(false);
-          };
-          const onScroll = () => update();
-          document.addEventListener("mousedown", onDoc);
-          window.addEventListener("scroll", onScroll, true);
-          window.addEventListener("resize", onScroll);
-          return () => {
-            document.removeEventListener("mousedown", onDoc);
-            window.removeEventListener("scroll", onScroll, true);
-            window.removeEventListener("resize", onScroll);
-          };
-        }, [open]);
         const hasAccount = !!entry.efaxId;
-        const items = [
-          { key: "add",    icon: "plus",  label: "Add Account",    enabled: true,        onClick: onAdd },
-          { key: "edit",   icon: "edit",  label: "Edit Account",   enabled: hasAccount,  onClick: onEdit },
-          { key: "delete", icon: "trash", label: "Delete Account", enabled: hasAccount,  onClick: onDelete },
-        ];
         return (
-          <>
-            <button
-              ref={btnRef}
-              type="button"
-              onClick={() => setOpen((x) => !x)}
-              aria-label="More options"
-              className={`inline-flex items-center justify-center w-[26px] h-[26px] rounded text-ink-700 hover:bg-ink-50 hover:text-primary-500 transition-colors bvp-focus ${open ? "bg-ink-50 text-primary-500" : ""}`}
-            >
-              <Icon name="more-vert" size={20} />
-            </button>
-            {open && ReactDOM.createPortal(
-              <div
-                ref={menuRef}
-                className="fixed z-[9999] bg-white rounded shadow-dropdown py-1 bvp-animate-in"
-                style={{ top: pos.top, left: pos.left, width: 180 }}
-              >
-                {items.map((it) => (
-                  <div
-                    key={it.key}
-                    onClick={() => {
-                      if (!it.enabled) return;
-                      setOpen(false);
-                      it.onClick?.();
-                    }}
-                    className={`px-3 py-2 text-[14px] flex items-center gap-3 ${
-                      it.enabled
-                        ? "text-ink-900 cursor-pointer bvp-row-hover"
-                        : "text-ink-400 cursor-not-allowed"
-                    }`}
-                  >
-                    <Icon name={it.icon} size={16} />
-                    <span>{it.label}</span>
-                  </div>
-                ))}
-              </div>,
-              document.body
-            )}
-          </>
+          <TableRowActionsMenu
+            ariaLabel="More options"
+            triggerClassName="w-[26px] h-[26px]"
+            items={[
+              { key: "add", icon: "plus", label: "Add Account", onClick: onAdd },
+              { key: "edit", icon: "edit", label: "Edit Account", disabled: !hasAccount, onClick: onEdit },
+              { key: "delete", icon: "trash", label: "Delete Account", disabled: !hasAccount, onClick: onDelete },
+            ]}
+          />
         );
       };
 
@@ -3916,12 +3900,7 @@
           ...(scheduler.locationHolidays ?? [])
             .map((id) => locationHolidays.find((l) => l.id === id))
             .filter(Boolean)
-            .map((h) => ({
-              ...h,
-              dest: h.destination || h.dest || "Holiday Greeting [2243]",
-              slots: h.editSource?.slots || h.slots,
-              source: "location",
-            })),
+            .map((h) => ({ ...h, dest: h.destination || h.dest || "Holiday Greeting [2243]", source: "location" })),
         ];
         // An ongoing holiday is any attached location holiday flagged as ongoing.
         const hasOngoingHoliday = (scheduler.locationHolidays ?? []).some((id) => {
@@ -4051,9 +4030,7 @@
                       const datePart = hasMultiDates ? "Multiple dates" : (wherePieces[0] || "");
                       const timePart = hasMultiSlots ? "Multiple time slots" : (wherePieces[1] || "");
                       const dateTip = hasMultiDates ? h.dates.join(", ") : "";
-                      const slotTipLines = hasMultiSlots ? buildSlotTooltipLines(h.slots) : null;
-                      const hasMultiDests = hasMultipleHolidayDestinations(h);
-                      const destTipLines = hasMultiDests ? holidayDestSlotsTooltipLines(h) : null;
+                      const slotTip = hasMultiSlots ? h.slots.map((s) => `${s.start} - ${s.end}`).join(", ") : "";
                       const fallbackTip = h.tooltip || h.when;
                       return (
                         <div key={h.id || idx} className={`grid grid-cols-[260px_280px_40px_1fr] items-center h-9 px-3 rounded-lg ${rowBg}`}>
@@ -4074,7 +4051,7 @@
                                 <>
                                   {" • "}
                                   {hasMultiSlots ? (
-                                    <PortalTooltip lines={slotTipLines}>
+                                    <PortalTooltip text={slotTip}>
                                       <span className="cursor-help">{timePart}</span>
                                     </PortalTooltip>
                                   ) : (
@@ -4085,13 +4062,7 @@
                             </span>
                           </div>
                           <Icon name="arrow-right" size={16} className="text-ink-500" />
-                          {hasMultiDests && destTipLines ? (
-                            <PortalTooltip lines={destTipLines} className="justify-self-start">
-                              <span className="text-[14px] text-ink-700 font-semibold cursor-help">{h.dest}</span>
-                            </PortalTooltip>
-                          ) : (
-                            <div className="text-[14px] text-ink-700 font-semibold">{h.dest}</div>
-                          )}
+                          <div className="text-[14px] text-ink-700 font-semibold">{h.dest}</div>
                         </div>
                       );
                     })}
@@ -4154,7 +4125,10 @@
             // Group any pre-existing matching slots so list + calendar render in lockstep.
             const initialTimeSlots = mergeMatchingTimeSlots(scheduler?.timeSlots ?? []);
             const initialCustomHolidays = scheduler?.customHolidays ?? [];
-            const initialLocationHolidays = scheduler?.locationHolidays ?? [];
+            const initialLocationHolidays = filterValidLocationHolidayIds(
+              scheduler?.locationHolidays ?? [],
+              locationHolidaysCatalog
+            );
 
             initialStateRef.current = {
               info: {
@@ -4185,7 +4159,16 @@
             setCustomHolidays(initialCustomHolidays);
             setLocationHolidays(initialLocationHolidays);
           }
-        }, [open, scheduler]);
+        }, [open, scheduler, locationHolidaysCatalog]);
+
+        // If a catalog holiday is removed while the editor is open, drop stale selections.
+        useEffect(() => {
+          if (!open) return;
+          setLocationHolidays((ids) => {
+            const filtered = filterValidLocationHolidayIds(ids, locationHolidaysCatalog);
+            return filtered.length === (ids || []).length ? ids : filtered;
+          });
+        }, [open, locationHolidaysCatalog]);
 
         // Compute per-tab dirty state vs initial snapshot.
         const tabDirty = useMemo(() => {
@@ -4267,7 +4250,7 @@
         };
         const onDeleteCustomHoliday = (id) => setCustomHolidays((hs) => hs.filter((h) => h.id !== id));
         const onSaveLocationHolidays = (ids) => {
-          setLocationHolidays(ids);
+          setLocationHolidays(filterValidLocationHolidayIds(ids, locationHolidaysCatalog));
           setLocationHolidayModal(false);
         };
         const onDeleteLocationHoliday = (id) => setLocationHolidays((ids) => ids.filter((x) => x !== id));
@@ -4280,7 +4263,7 @@
           assignedTo: assignedDIDs.join(", "),
           timeSlots,
           customHolidays,
-          locationHolidays,
+          locationHolidays: filterValidLocationHolidayIds(locationHolidays, locationHolidaysCatalog),
         });
 
         // Transfer-list helpers — pull from the live DID list so the modal matches the DIDs page.
@@ -6014,15 +5997,9 @@
           return null; // use `when`
         })();
         const datesTooltip = hasMultipleDates ? dates.join(", ") : "";
-        const slotsTooltipLines = hasMultipleSlots ? buildSlotTooltipLines(slots) : null;
-        const hasMultipleDests = dest === "Multiple destinations" || (() => {
-          if (!Array.isArray(slots) || slots.length < 2) return false;
-          const values = slots.map((s) => s.dest ?? s.destValue).filter(Boolean);
-          return new Set(values).size > 1;
-        })();
-        const destTooltipLines = hasMultipleDests && Array.isArray(slots) && slots.length
-          ? buildSlotTooltipLines(slots, { forceDestination: true })
-          : null;
+        const slotsTooltip = hasMultipleSlots
+          ? slots.map((s) => `${s.start} - ${s.end}`).join(", ")
+          : "";
         const DatePart = () => {
           if (datePiece) {
             return (
@@ -6037,7 +6014,7 @@
           const txt = timePiece || (when.split(" • ")[1] || "");
           if (hasMultipleSlots) {
             return (
-              <PortalTooltip lines={slotsTooltipLines}>
+              <PortalTooltip text={slotsTooltip}>
                 <span className="cursor-help">{txt}</span>
               </PortalTooltip>
             );
@@ -6076,13 +6053,7 @@
               </div>
               <div className="flex items-center gap-2 pl-[26px]">
                 <Icon name="arrow-right" size={14} className="text-ink-600" />
-                {hasMultipleDests && destTooltipLines ? (
-                  <PortalTooltip lines={destTooltipLines}>
-                    <span className="text-[12px] text-ink-700 cursor-help">{dest}</span>
-                  </PortalTooltip>
-                ) : (
-                  <span className="text-[12px] text-ink-700">{dest}</span>
-                )}
+                <span className="text-[12px] text-ink-700">{dest}</span>
               </div>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
@@ -6161,7 +6132,6 @@
                     kind="location"
                     name={h.name}
                     when={h.when}
-                    slots={h.editSource?.slots || h.slots}
                     recurrence={h.recurrence || "Yearly"}
                     dest={h.destination || "Holiday Greeting [2243]"}
                     onDelete={() => onDeleteLocation(h.id)}
@@ -6213,10 +6183,12 @@
           else setViewMonth((m) => m + 1);
         };
 
+        // Single-select: clicking a day replaces any prior selection; clicking
+        // the currently-selected day clears it.
         const toggleDate = (iso) => {
           if (!iso) return;
-          if (selectedSet.has(iso)) onChange(selected.filter((x) => x !== iso));
-          else onChange([...selected, iso].sort());
+          if (selectedSet.has(iso)) onChange([]);
+          else onChange([iso]);
         };
 
         const monthLabel = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][viewMonth];
@@ -6293,7 +6265,6 @@
             window.removeEventListener("resize", onScroll);
           };
         }, [open]);
-        const hasMany = dates.length > 1;
         return (
           <div className="flex flex-col gap-1" ref={wrapRef}>
             <label className="text-[14px] font-semibold leading-5 tracking-[0.018em] text-ink-700">{label}</label>
@@ -6305,14 +6276,7 @@
               {dates.length === 0 ? (
                 <span className="text-ink-400 text-[14px] leading-5">YYYY-MM-DD</span>
               ) : (
-                <>
-                  <span className="text-ink-900 text-[14px] leading-5">{dates[0]}</span>
-                  {hasMany && (
-                    <span onClick={(e) => e.stopPropagation()}>
-                      <MorePill count={dates.length - 1} tooltipLines={dates} />
-                    </span>
-                  )}
-                </>
+                <span className="text-ink-900 text-[14px] leading-5">{dates[0]}</span>
               )}
               <Icon name="calendar-today" size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-600" />
             </div>
@@ -6354,40 +6318,6 @@
         return `${y}-${m}-${d}`;
       };
 
-      const defaultHolidaySlot = (id = `s-${Date.now()}`, dest = "") => ({
-        id,
-        start: "09:00 AM",
-        end: "05:00 PM",
-        dest: dest || "",
-      });
-
-      const normalizeHolidaySlots = (slots, fallbackDest = "") => {
-        const list = slots && slots.length ? slots : [defaultHolidaySlot("s1", fallbackDest)];
-        return list.map((s, i) => ({
-          id: s.id || `s-${Date.now()}-${i}`,
-          start: s.start || "09:00 AM",
-          end: s.end || "05:00 PM",
-          dest: s.dest ?? s.destValue ?? fallbackDest ?? "",
-        }));
-      };
-
-      const deriveHolidayDestinationFields = (timeConfig, slots, topLevelDestValue) => {
-        if (timeConfig !== "range") {
-          const destValue = topLevelDestValue || "";
-          return {
-            dest: destinationLabelForValue(destValue),
-            destValue,
-          };
-        }
-        const values = (slots || []).map((s) => s.dest).filter(Boolean);
-        const unique = [...new Set(values)];
-        if (!unique.length) return { dest: "", destValue: "" };
-        if (unique.length === 1) {
-          return { dest: destinationLabelForValue(unique[0]), destValue: unique[0] };
-        }
-        return { dest: "Multiple destinations", destValue: unique[0] };
-      };
-
       const CustomHolidayModal = ({ open, onClose, editing, onSave, title = "Custom Holiday", inlineDestination = false }) => {
         const [name, setName] = useState("");
         const [eventType, setEventType] = useState("yearly");
@@ -6400,12 +6330,9 @@
         const [dates, setDates] = useState([]);
         const [calOpen, setCalOpen] = useState(false);
         const [timeConfig, setTimeConfig] = useState("allday");
-        const [slots, setSlots] = useState([defaultHolidaySlot("s1")]);
+        const [slots, setSlots] = useState([{ id: "s1", start: "09:00 AM", end: "05:00 PM" }]);
         const [destination, setDestination] = useState("");
         const [confirmOpen, setConfirmOpen] = useState(false);
-        // Slot ids whose destination errors may show (after leaving that slot).
-        const [touchedSlotIds, setTouchedSlotIds] = useState([]);
-        const activeSlotIdRef = useRef(null);
         // Snapshot of opening values, used to disable Save until something changes.
         const initialRef = useRef(null);
 
@@ -6423,14 +6350,14 @@
                 movableDay: editing.movableDay ?? "",
                 dates: editing.dates ?? [],
                 timeConfig: editing.timeConfig ?? "allday",
-                slots: normalizeHolidaySlots(editing.slots, editing.destValue ?? ""),
+                slots: editing.slots && editing.slots.length ? editing.slots : [{ id: "s1", start: "09:00 AM", end: "05:00 PM" }],
                 destination: editing.destValue ?? "",
               }
             : {
                 name: "", eventType: "yearly", dateConfig: "fixed",
                 month: "", day: 1, observeWeekday: true,
                 occurrence: "", movableDay: "", dates: [],
-                timeConfig: "allday", slots: [defaultHolidaySlot("s1")],
+                timeConfig: "allday", slots: [{ id: "s1", start: "09:00 AM", end: "05:00 PM" }],
                 destination: "",
               };
           initialRef.current = init;
@@ -6448,33 +6375,15 @@
           setDestination(init.destination);
           setCalOpen(false);
           setConfirmOpen(false);
-          setTouchedSlotIds([]);
-          activeSlotIdRef.current = null;
         }, [open, editing]);
-
-        const isInsideSlotUI = (slotId, target) => {
-          if (!target?.closest) return false;
-          if (target.closest(`[data-holiday-slot-id="${slotId}"]`)) return true;
-          if (target.closest(`[data-holiday-slot-menu="${slotId}"]`)) return true;
-          return false;
-        };
-
-        const findSlotIdForTarget = (target) => {
-          if (!target?.closest) return null;
-          const card = target.closest("[data-holiday-slot-id]");
-          if (card) return card.getAttribute("data-holiday-slot-id");
-          const menu = target.closest("[data-holiday-slot-menu]");
-          if (menu) return menu.getAttribute("data-holiday-slot-menu");
-          return null;
-        };
 
         const isOneTime = eventType === "one-time";
         const isFixed = dateConfig === "fixed";
         const isMovable = dateConfig === "movable";
         const isRange = timeConfig === "range";
 
-        const dateFieldLabel = isOneTime ? "Date(s)" : "Date";
-        const dateConfigLeftLabel = isOneTime ? "Fixed date(s)" : "Fixed date";
+        const dateFieldLabel = "Date";
+        const dateConfigLeftLabel = "Fixed date";
 
         // Validation
         let datesOk = true;
@@ -6483,55 +6392,19 @@
         if (isMovable) datesOk = Boolean(occurrence && movableDay && month);
         const slotsOk = !isRange || (
           slots.length > 0 &&
-          slots.every((s) =>
-            s.start && s.end && s.dest &&
-            parseTimeToMinutes(s.start) < parseTimeToMinutes(s.end)
-          )
+          slots.every((s) => s.start && s.end && parseTimeToMinutes(s.start) < parseTimeToMinutes(s.end))
         );
-        const destinationOk = isRange || Boolean(destination);
-        const validOk = Boolean(name.trim() && destinationOk && datesOk && slotsOk);
+        const validOk = Boolean(name.trim() && destination && datesOk && slotsOk);
         const currentSnap = { name, eventType, dateConfig, month, day, observeWeekday, occurrence, movableDay, dates, timeConfig, slots, destination };
         const dirty = initialRef.current ? JSON.stringify(currentSnap) !== JSON.stringify(initialRef.current) : false;
         const canSave = validOk && dirty;
 
-        const isSlotTouched = (id) => touchedSlotIds.includes(id);
-        const markSlotTouched = (id) => {
-          if (!id) return;
-          setTouchedSlotIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-        };
-        const noteSlotActive = (id) => {
-          if (id) activeSlotIdRef.current = id;
-        };
-        const handlePointerLeaveSlot = (leftSlotId) => {
-          if (!leftSlotId) return;
-          markSlotTouched(leftSlotId);
-        };
-
-        useEffect(() => {
-          if (!open || timeConfig !== "range") return;
-          const onMouseDown = (e) => {
-            const activeId = activeSlotIdRef.current;
-            const clickedSlotId = findSlotIdForTarget(e.target);
-            if (activeId && !isInsideSlotUI(activeId, e.target)) {
-              handlePointerLeaveSlot(activeId);
-            }
-            activeSlotIdRef.current = clickedSlotId;
-          };
-          document.addEventListener("mousedown", onMouseDown, true);
-          return () => document.removeEventListener("mousedown", onMouseDown, true);
-        }, [open, timeConfig, slots]);
         const addSlot = () => {
-          setSlots((xs) => [...xs, defaultHolidaySlot(`s-${Date.now()}`)]);
+          const id = `s-${Date.now()}`;
+          setSlots((xs) => [...xs, { id, start: "09:00 AM", end: "05:00 PM" }]);
         };
-        const removeSlot = (id) => {
-          setSlots((xs) => xs.filter((s) => s.id !== id));
-          setTouchedSlotIds((prev) => prev.filter((x) => x !== id));
-          if (activeSlotIdRef.current === id) activeSlotIdRef.current = null;
-        };
-        const updateSlot = (id, patch) => {
-          noteSlotActive(id);
-          setSlots((xs) => xs.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-        };
+        const removeSlot = (id) => setSlots((xs) => xs.filter((s) => s.id !== id));
+        const updateSlot = (id, patch) => setSlots((xs) => xs.map((s) => (s.id === id ? { ...s, ...patch } : s)));
 
         const datesDisplay = () => {
           if (!dates.length) return "";
@@ -6542,21 +6415,20 @@
 
         const handleSave = () => {
           if (!canSave) return;
-          const { dest: destLabel, destValue: destValueOut } = deriveHolidayDestinationFields(timeConfig, slots, destination);
+          const destLabel = destinationOptions.find((o) => o.value === destination)?.label ?? "";
           const monthLabel = monthOptions[parseInt(month,10)-1]?.label || "";
-          const slotWhenStr = (s) => `${s.start} - ${s.end}`;
           let when = "";
           if (isOneTime && isFixed) {
             const first = dates[0] ? formatIsoShort(dates[0]) : "";
             const more = dates.length > 1 ? ` +${dates.length - 1} more` : "";
-            const slotSuffix = isRange ? ` • ${slots.map(slotWhenStr).join(", ")}` : " • All day";
+            const slotSuffix = isRange ? ` • ${slots.map((s) => `${s.start} - ${s.end}`).join(", ")}` : " • All day";
             when = `${first}${more}${slotSuffix}`;
           } else if (isMovable) {
             const occLabel = occurrenceOptions.find((o) => o.value === occurrence)?.label || "First";
-            const slotStr = isRange ? slots.map(slotWhenStr).join(", ") : "All day";
+            const slotStr = isRange ? slots.map((s) => `${s.start} - ${s.end}`).join(", ") : "All day";
             when = `${occLabel} ${movableDay} of ${monthLabel} • ${slotStr}`;
           } else {
-            const slotStr = isRange ? slots.map(slotWhenStr).join(", ") : "All day";
+            const slotStr = isRange ? slots.map((s) => `${s.start} - ${s.end}`).join(", ") : "All day";
             when = `${monthLabel} ${day} • ${slotStr}`;
           }
           const tooltip = buildHolidayTooltip({
@@ -6581,7 +6453,7 @@
             when,
             tooltip,
             dest: destLabel,
-            destValue: destValueOut,
+            destValue: destination,
           });
         };
 
@@ -6610,14 +6482,13 @@
               </>
             }
           >
-            <div className="bvp-holiday-modal flex flex-col gap-5 py-4">
+            <div className="flex flex-col gap-5 py-4">
               {inlineDestination ? (
                 <div className="grid grid-cols-2 gap-4">
                   <Input label="Holiday name" required value={name} onChange={setName} placeholder="e.g. Christmas" />
                   <Select
                     label="Destination"
-                    required={!isRange}
-                    disabled={isRange}
+                    required
                     value={destination}
                     onChange={setDestination}
                     options={destinationOptions}
@@ -6629,7 +6500,7 @@
               )}
 
               <div className="flex flex-col gap-2">
-                <div className="bvp-modal-section-label text-[14px] font-semibold text-ink-900">Event type</div>
+                <div className="text-[14px] font-semibold text-ink-700">Event type</div>
                 <div className="flex items-center gap-6">
                   <Radio name="event-type" value="yearly"   checked={eventType === "yearly"}   onChange={(v) => setEventType(v)} label="Recurring annually" />
                   <Radio name="event-type" value="one-time" checked={eventType === "one-time"} onChange={(v) => { setEventType(v); if (dateConfig === "movable") setDateConfig("fixed"); }} label="One-time event" />
@@ -6637,7 +6508,7 @@
               </div>
 
               <div className="flex flex-col gap-2">
-                <div className="bvp-modal-section-label text-[14px] font-semibold text-ink-900">Date configuration</div>
+                <div className="text-[14px] font-semibold text-ink-700">Date configuration</div>
                 <div className="flex items-center gap-6">
                   <Radio name="date-config" value="fixed"   checked={isFixed}   onChange={setDateConfig} label={dateConfigLeftLabel} />
                   <Radio name="date-config" value="movable" checked={isMovable} onChange={setDateConfig} label="Movable date" disabled={isOneTime} />
@@ -6652,7 +6523,7 @@
                   <div className="grid grid-cols-[1fr_96px] gap-4">
                     <Select label="Month" value={month} onChange={setMonth} options={monthOptions} placeholder="Select month" />
                     <div className="flex flex-col gap-1">
-                      <FieldLabel>Date</FieldLabel>
+                      <label className="text-[14px] font-semibold leading-5 tracking-[0.018em] text-ink-700">Date</label>
                       <div className="relative w-full h-8 flex items-center border border-ink-200 rounded bg-white">
                         <input
                           type="text"
@@ -6706,7 +6577,7 @@
               <hr className="border-ink-100" />
 
               <div className="flex flex-col gap-2">
-                <div className="bvp-modal-section-label text-[14px] font-semibold text-ink-900">Time configuration</div>
+                <div className="text-[14px] font-semibold text-ink-700">Time configuration</div>
                 <div className="flex flex-col gap-2">
                   <Radio name="time-config" value="allday" checked={!isRange} onChange={setTimeConfig} label="All day" />
                   <Radio name="time-config" value="range"  checked={isRange}  onChange={setTimeConfig} label="Specific time ranges" />
@@ -6716,40 +6587,21 @@
                     {slots.map((s, idx) => {
                       const slotHasStart = !!(s.start && String(s.start).trim());
                       const slotHasEnd = !!(s.end && String(s.end).trim());
-                      const slotHasDest = !!(s.dest && String(s.dest).trim());
                       const slotRangeValid = slotHasStart && slotHasEnd
                         ? parseTimeToMinutes(s.start) < parseTimeToMinutes(s.end)
                         : true;
                       const slotErr = slotHasStart && slotHasEnd && !slotRangeValid;
-                      const slotTouched = isSlotTouched(s.id);
-                      const destErr = slotTouched && slotHasStart && slotHasEnd && slotRangeValid && !slotHasDest;
                       return (
-                        <div
-                          key={s.id}
-                          data-holiday-slot-id={s.id}
-                          className="flex flex-col gap-2 rounded border border-ink-100 px-3 py-2"
-                          onMouseDown={() => noteSlotActive(s.id)}
-                        >
+                        <div key={s.id} className="flex flex-col gap-2 rounded border border-ink-100 px-3 py-2">
                           <div className="flex items-center justify-between">
                             <span className="text-[14px] font-semibold text-ink-900">Slot {idx + 1}</span>
                             <IconButton name="trash" title="Remove" onClick={() => removeSlot(s.id)} />
                           </div>
-                          <div className="grid grid-cols-3 gap-3">
+                          <div className="grid grid-cols-2 gap-3">
                             <TimePickerInput label="Start time" value={s.start} error={slotErr}
                               onChange={(v) => updateSlot(s.id, { start: v })} />
-                            <TimePickerInput label="End time" value={s.end} error={slotErr}
+                            <TimePickerInput label="End time"   value={s.end}   error={slotErr}
                               onChange={(v) => updateSlot(s.id, { end: v })} />
-                            <Select
-                              label="Destination"
-                              required
-                              value={s.dest}
-                              error={destErr}
-                              menuDataSlot={s.id}
-                              onChange={(v) => updateSlot(s.id, { dest: v })}
-                              onDropdownClose={() => markSlotTouched(s.id)}
-                              options={destinationOptions}
-                              placeholder="Select destination…"
-                            />
                           </div>
                           {slotErr && (
                             <div className="flex items-center gap-1 text-[12px] leading-4 text-[#B3261E]">
@@ -6777,8 +6629,7 @@
 
                   <Select
                     label="Destination"
-                    required={!isRange}
-                    disabled={isRange}
+                    required
                     value={destination}
                     onChange={setDestination}
                     options={destinationOptions}
@@ -6798,6 +6649,17 @@
           </>
         );
       };
+
+      const LocationHolidaysEmptyState = ({ className = "" }) => (
+        <div className={`flex flex-col items-center gap-5 ${className}`}>
+          <div className="w-[72px] h-[72px] rounded-full bg-ink-50 flex items-center justify-center shrink-0">
+            <Icon name="holiday" size={38} className="text-ink-700" />
+          </div>
+          <p className="text-center text-[14px] leading-5 text-ink-700">
+            There are no holidays at this location yet
+          </p>
+        </div>
+      );
 
       /* =====================================================
        *  LOCATION HOLIDAY MODAL (checklist)
@@ -6836,34 +6698,38 @@
               </>
             }
           >
-            <div className="flex flex-col gap-3 py-4">
-              {catalog.map((h) => (
-                <label key={h.id} className="flex items-center gap-3 cursor-pointer h-6">
-                  <span className="relative w-5 h-5 shrink-0">
-                    <input
-                      type="checkbox"
-                      checked={selected.includes(h.id)}
-                      onChange={() => toggle(h.id)}
-                      className="peer absolute inset-0 w-5 h-5 opacity-0 cursor-pointer"
-                    />
-                    <span className="pointer-events-none absolute inset-0 rounded-[4px] border-2 border-ink-500 peer-checked:border-primary-500 peer-checked:bg-primary-500 transition-colors" />
-                    <svg
-                      viewBox="0 0 24 24"
-                      className="pointer-events-none absolute inset-0 w-full h-full opacity-0 peer-checked:opacity-100"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M10.7092 15.8329C10.6576 15.833 10.6065 15.8227 10.559 15.8028C10.5114 15.7829 10.4683 15.7537 10.4322 15.7169L7.84716 13.1369C7.77369 13.0634 7.73242 12.9638 7.73242 12.8599C7.73242 12.756 7.77369 12.6564 7.84716 12.5829C7.92062 12.5094 8.02026 12.4682 8.12416 12.4682C8.22805 12.4682 8.32769 12.5094 8.40116 12.5829L10.6712 14.8529L15.5712 8.32091C15.6005 8.27727 15.6385 8.24007 15.6827 8.21156C15.7269 8.18305 15.7765 8.16383 15.8284 8.15507C15.8802 8.14631 15.9334 8.1482 15.9845 8.16061C16.0356 8.17301 16.0837 8.19569 16.1258 8.22726C16.1679 8.25882 16.2031 8.29862 16.2293 8.34423C16.2555 8.38984 16.2722 8.4403 16.2783 8.49255C16.2845 8.54481 16.2799 8.59776 16.2649 8.64819C16.2499 8.69862 16.2248 8.74548 16.1912 8.78591L11.0192 15.6779C10.986 15.7225 10.9437 15.7594 10.895 15.7861C10.8464 15.8129 10.7925 15.8288 10.7372 15.8329H10.7092Z"
-                        fill="white"
-                        stroke="white"
+            {catalog.length === 0 ? (
+              <LocationHolidaysEmptyState className="py-16" />
+            ) : (
+              <div className="flex flex-col gap-3 py-4">
+                {catalog.map((h) => (
+                  <label key={h.id} className="flex items-center gap-3 cursor-pointer h-6">
+                    <span className="relative w-5 h-5 shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={selected.includes(h.id)}
+                        onChange={() => toggle(h.id)}
+                        className="peer absolute inset-0 w-5 h-5 opacity-0 cursor-pointer"
                       />
-                    </svg>
-                  </span>
-                  <span className="text-[14px] text-ink-900 font-semibold">{h.name}</span>
-                  <span className="text-[14px] text-ink-600">{h.when}</span>
-                </label>
-              ))}
-            </div>
+                      <span className="pointer-events-none absolute inset-0 rounded-[4px] border-2 border-ink-500 peer-checked:border-primary-500 peer-checked:bg-primary-500 transition-colors" />
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="pointer-events-none absolute inset-0 w-full h-full opacity-0 peer-checked:opacity-100"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          d="M10.7092 15.8329C10.6576 15.833 10.6065 15.8227 10.559 15.8028C10.5114 15.7829 10.4683 15.7537 10.4322 15.7169L7.84716 13.1369C7.77369 13.0634 7.73242 12.9638 7.73242 12.8599C7.73242 12.756 7.77369 12.6564 7.84716 12.5829C7.92062 12.5094 8.02026 12.4682 8.12416 12.4682C8.22805 12.4682 8.32769 12.5094 8.40116 12.5829L10.6712 14.8529L15.5712 8.32091C15.6005 8.27727 15.6385 8.24007 15.6827 8.21156C15.7269 8.18305 15.7765 8.16383 15.8284 8.15507C15.8802 8.14631 15.9334 8.1482 15.9845 8.16061C16.0356 8.17301 16.0837 8.19569 16.1258 8.22726C16.1679 8.25882 16.2031 8.29862 16.2293 8.34423C16.2555 8.38984 16.2722 8.4403 16.2783 8.49255C16.2845 8.54481 16.2799 8.59776 16.2649 8.64819C16.2499 8.69862 16.2248 8.74548 16.1912 8.78591L11.0192 15.6779C10.986 15.7225 10.9437 15.7594 10.895 15.7861C10.8464 15.8129 10.7925 15.8288 10.7372 15.8329H10.7092Z"
+                          fill="white"
+                          stroke="white"
+                        />
+                      </svg>
+                    </span>
+                    <span className="text-[14px] text-ink-900 font-semibold">{h.name}</span>
+                    <span className="text-[14px] text-ink-600">{h.when}</span>
+                  </label>
+                ))}
+              </div>
+            )}
           </Modal>
           <UnsavedChangesDialog
             open={confirmOpen}
